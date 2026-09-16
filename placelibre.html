@@ -36,7 +36,7 @@
   body{position:fixed;inset:0;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--map-canvas);color:var(--ink);}
   .num, h1,h2,h3{font-family:"Archivo",-apple-system,sans-serif;}
   #map{position:absolute;inset:0;width:100%;height:100%;}
-  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.7);}
+  .leaflet-tile-pane{filter:saturate(0.9) contrast(0.96) brightness(1.03);}
 
   /* ---- top bar ---- */
   .top-bar{position:absolute;top:0;left:0;right:0;z-index:1000;padding:max(12px,env(safe-area-inset-top)) 12px 0 12px;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
@@ -349,6 +349,7 @@
   const STOP_RADIUS = 15;          // m : rester dans ce rayon = "toujours au même endroit"
   const LEAVE_DISTANCE = 30;       // m : distance pour considérer qu'on a vraiment quitté l'endroit
   const STOP_THRESHOLD_MS = 90 * 1000; // 1min30
+  const DEDUP_RADIUS = 20;         // m : rayon de fusion des signalements (équivalent simplifié d'une cellule H3)
   let stopAnchor = null, stopStartTime = null, hadQualifyingStop = false, lastLeavePromptTs = 0;
   let bannerActive = false;
   let promptedProximityIds = new Set();
@@ -480,28 +481,27 @@
     snapshotInitialized = true;
   }
 
-  // ---------- storage ----------
+  // ---------- storage (localStorage : fonctionne sur n'importe quel hébergement) ----------
+  function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+  function lsSet(key, value){ try{ localStorage.setItem(key, value); return true; }catch(e){ return false; } }
+
   async function loadIdentity(){
-    try{
-      const r = await window.storage.get('identity', false);
-      if(r && r.value){ identity = JSON.parse(r.value); return; }
-    }catch(e){}
+    const v = lsGet('placelibre_identity');
+    if(v){ try{ identity = JSON.parse(v); return; }catch(e){} }
     identity = { deviceId: uuid(), name: 'Contributeur' + Math.floor(Math.random()*900+100) };
-    try{ await window.storage.set('identity', JSON.stringify(identity), false); }catch(e){}
+    lsSet('placelibre_identity', JSON.stringify(identity));
   }
-  async function saveIdentity(){
-    try{ await window.storage.set('identity', JSON.stringify(identity), false); }catch(e){}
-  }
+  async function saveIdentity(){ lsSet('placelibre_identity', JSON.stringify(identity)); }
   async function loadState(){
-    try{
-      const r = await window.storage.get('app-state', true);
-      if(r && r.value){ state = JSON.parse(r.value); }
-    }catch(e){ state = { spots: [], leaderboard: {} }; }
+    const v = lsGet('placelibre_state');
+    if(v){ try{ state = JSON.parse(v); }catch(e){ state = { spots: [], leaderboard: {} }; } }
+    else { state = { spots: [], leaderboard: {} }; }
     pruneExpired();
   }
   async function saveState(){
     pruneExpired();
-    try{ await window.storage.set('app-state', JSON.stringify(state), true); }catch(e){ toast('Sauvegarde impossible'); }
+    const ok = lsSet('placelibre_state', JSON.stringify(state));
+    if(!ok) toast('Sauvegarde impossible (stockage plein ou bloqué par le navigateur)');
     updateProfileChip();
   }
   function freeAt(spot){ return spot.reportType === 'leaving' ? spot.leaveAt : spot.ts; }
@@ -550,12 +550,30 @@
     }, ()=>{}, { enableHighAccuracy:true, maximumAge:2000 });
   }
 
+  function findNearbyActiveSpot(lat, lon, vehicle){
+    for(const s of (state.spots||[])){
+      if(vehicle && s.vehicle !== vehicle) continue;
+      const d = haversine(lat, lon, s.lat, s.lon);
+      if(d <= DEDUP_RADIUS) return s;
+    }
+    return null;
+  }
+
+  function autoInvalidateIfOccupying(anchor){
+    const spot = findNearbyActiveSpot(anchor.lat, anchor.lon, null);
+    if(spot && spot.reporterId !== identity.deviceId){
+      state.spots = state.spots.filter(s=>s.id!==spot.id);
+      saveState().then(()=>{ renderMarkers(); toast('Place occupée détectée automatiquement — carte mise à jour'); });
+    }
+  }
+
   function handleNewPosition(lat, lon, t){
     if(!stopAnchor){ stopAnchor = {lat,lon}; stopStartTime = t; hadQualifyingStop = false; return; }
     const d = haversine(stopAnchor.lat, stopAnchor.lon, lat, lon);
     if(d <= STOP_RADIUS){
       if(!hadQualifyingStop && (t - stopStartTime) >= STOP_THRESHOLD_MS){
         hadQualifyingStop = true;
+        autoInvalidateIfOccupying(stopAnchor);
       }
     } else if(d > LEAVE_DISTANCE){
       if(hadQualifyingStop && (t - lastLeavePromptTs) > 5*60*1000){
@@ -799,11 +817,22 @@
     const pos = overridePos || myPos;
     if(!pos) return;
     const vals = overrideValues || {vehicle:'car',size:'S',cat:'normal',zone:'free'};
+
+    const existing = findNearbyActiveSpot(pos.lat, pos.lon, vals.vehicle);
+    if(existing){
+      existing.confidence = (existing.confidence||1)+1;
+      existing.ts = Date.now();
+      const me = myEntry(); me.points += 3; me.confirms = (me.confirms||0)+1; bumpStreak(me);
+      await saveState(); renderMarkers();
+      toast(`Place déjà signalée — confirmée (fiabilité ×${existing.confidence}) +3 pts`);
+      return;
+    }
+
     const now = Date.now();
     const spot = {
       id: uuid(), lat: pos.lat, lon: pos.lon,
       vehicle: vals.vehicle, size: vals.size, cat: vals.cat, zone: vals.zone,
-      reportType:'immediate', leaveAt: now, ts: now,
+      reportType:'immediate', leaveAt: now, ts: now, confidence: 1,
       reporterId: identity.deviceId, reporterName: identity.name,
       thanks:0, confirmedCount:0
     };
@@ -883,11 +912,25 @@
     }
     const now = Date.now();
     const delayMs = selected.reportType === 'leaving' ? parseInt(selected.delay,10) * 60000 : 0;
+
+    if(selected.reportType === 'immediate'){
+      const existing = findNearbyActiveSpot(myPos.lat, myPos.lon, selected.vehicle);
+      if(existing){
+        existing.confidence = (existing.confidence||1)+1;
+        existing.ts = now;
+        const me = myEntry(); me.points += 3; me.confirms = (me.confirms||0)+1; bumpStreak(me);
+        await saveState();
+        closeSheets(); renderMarkers();
+        toast(`Place déjà signalée — confirmée (fiabilité ×${existing.confidence}) +3 pts`);
+        return;
+      }
+    }
+
     const spot = {
       id: uuid(), lat: myPos.lat, lon: myPos.lon,
       vehicle: selected.vehicle, size: selected.size, cat: selected.cat, zone: selected.zone,
       reportType: selected.reportType, leaveAt: now + delayMs,
-      ts: now, reporterId: identity.deviceId, reporterName: identity.name,
+      ts: now, confidence: 1, reporterId: identity.deviceId, reporterName: identity.name,
       thanks: 0, confirmedCount: 0
     };
     state.spots.push(spot);
@@ -925,7 +968,8 @@
     const mine = spot.reporterId === identity.deviceId;
     const pending = isPending(spot);
     const ageSec = Math.floor((Date.now()-spot.ts)/1000);
-    $('detailSub').textContent = ageSec < 60 ? `Signalée il y a ${ageSec}s` : `Signalée il y a ${Math.floor(ageSec/60)} min`;
+    const ageTxt = ageSec < 60 ? `Signalée il y a ${ageSec}s` : `Signalée il y a ${Math.floor(ageSec/60)} min`;
+    $('detailSub').textContent = ageTxt + ((spot.confidence||1) >= 2 ? ` · Confirmée ×${spot.confidence}` : '');
 
     $('pendingInfo').style.display = (pending && !mine) ? 'block' : 'none';
     $('pendingOwnerActions').style.display = (pending && mine) ? 'block' : 'none';
