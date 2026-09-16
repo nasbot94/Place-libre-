@@ -36,6 +36,7 @@
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--map-canvas);color:var(--ink);overflow:hidden;}
   .num, h1,h2,h3{font-family:"Archivo",-apple-system,sans-serif;}
   #map{position:absolute;inset:0;width:100%;height:100%;}
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.7);}
 
   /* ---- top bar ---- */
   .top-bar{position:absolute;top:0;left:0;right:0;z-index:1000;padding:max(12px,env(safe-area-inset-top)) 12px 0 12px;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
@@ -380,7 +381,7 @@
   ];
 
   let map = L.map('map', { zoomControl:false }).setView([48.8566,2.3522], 15);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:20, attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
 
   let myPos = null;
   let focusPoint = null;
