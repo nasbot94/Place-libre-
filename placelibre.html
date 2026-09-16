@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PlaceLibre</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F9D66">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PlaceLibre">
+<style>
+  :root{
+    /* -- signage-inspired palette : light "signage" chrome floating over a dark night map -- */
+    --ink:#12161C;
+    --ink-soft:#5B6577;
+    --paper:#EDEFEC;      /* cool concrete grey, not warm cream */
+    --paper-2:#E1E4DF;
+    --paper-card:#F7F8F5;
+    --line: rgba(18,22,28,0.10);
+    --go:#1F9D66;         /* go-green: available / primary action */
+    --go-deep:#146B47;
+    --brand:#175FD1;      /* sign blue: neutral UI accents */
+    --cat-normal:#1F9D66;
+    --cat-handicap:#2E86DE;
+    --cat-delivery:#F2B705;
+    --danger:#D64545;
+    --map-canvas:#10131a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;overscroll-behavior:none;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--map-canvas);color:var(--ink);overflow:hidden;}
+  .num, h1,h2,h3{font-family:"Archivo",-apple-system,sans-serif;}
+  #map{position:absolute;inset:0;width:100%;height:100%;}
+
+  /* ---- top bar ---- */
+  .top-bar{position:absolute;top:0;left:0;right:0;z-index:1000;padding:max(12px,env(safe-area-inset-top)) 12px 0 12px;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+  .hero-row{display:flex;gap:8px;pointer-events:auto;}
+  .hero-stat{flex:1;background:var(--paper-card);border-radius:16px;padding:10px 16px;display:flex;align-items:baseline;gap:8px;box-shadow:0 8px 20px rgba(0,0,0,0.35);border-left:5px solid var(--go);}
+  .hero-stat .num{font-size:26px;font-weight:800;color:var(--ink);line-height:1;}
+  .hero-stat .num2{font-size:16px;font-weight:700;color:var(--cat-delivery);}
+  .hero-stat .lbl{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .profile-chip{pointer-events:auto;background:var(--paper-card);border-radius:16px;padding:8px 12px;display:flex;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(0,0,0,0.35);}
+  .profile-chip .avatar{width:28px;height:28px;border-radius:50%;background:var(--go);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;font-family:"Archivo",sans-serif;flex-shrink:0;}
+  .profile-chip .pts{font-size:13px;font-weight:800;color:var(--ink);white-space:nowrap;}
+
+  .search-row{display:flex;gap:8px;pointer-events:auto;}
+  .search-pill{flex:1;background:var(--paper-card);border-radius:100px;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 16px rgba(0,0,0,0.3);}
+  .search-pill svg{color:var(--ink-soft);flex-shrink:0;}
+  .search-pill input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-size:15px;font-weight:500;caret-color:var(--go);}
+  .search-pill input::placeholder{color:var(--ink-soft);}
+  .icon-btn{width:44px;height:44px;flex-shrink:0;border-radius:50%;background:var(--paper-card);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.3);color:var(--ink);}
+  .icon-btn:active{transform:scale(0.93);}
+
+  .suggestions{pointer-events:auto;background:var(--paper-card);border-radius:16px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,0.3);max-height:0;transition:max-height .25s ease;}
+  .suggestions.open{max-height:300px;overflow-y:auto;}
+  .sugg-item{padding:12px 16px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);}
+  .sugg-item:last-child{border-bottom:none;}
+  .sugg-item:active{background:var(--paper-2);}
+  .sugg-item svg{color:var(--ink-soft);flex-shrink:0;}
+  .sugg-item .name{font-size:14.5px;font-weight:600;color:var(--ink);}
+  .sugg-item .addr{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+
+  .control-row{pointer-events:auto;background:var(--paper-card);border-radius:100px;padding:9px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 16px rgba(0,0,0,0.28);align-self:flex-start;}
+  .control-row span{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;font-weight:600;}
+  .control-row strong{color:var(--go);}
+  .control-row input[type=range]{width:108px;accent-color:var(--brand);}
+  .zone-filter-chip{width:32px;height:32px;border-radius:10px;background:var(--paper-card);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);opacity:0.4;flex-shrink:0;box-shadow:0 4px 10px rgba(0,0,0,0.2);font-family:"Archivo",sans-serif;font-weight:800;font-size:11px;}
+  .zone-filter-chip.active{opacity:1;background:var(--ink);color:#fff;}
+
+  /* ---- FAB report button ---- */
+  .report-fab{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:1000;background:var(--go);color:#fff;border:none;border-radius:100px;padding:16px 26px;font-family:"Archivo",sans-serif;font-size:15px;font-weight:800;display:flex;align-items:center;gap:9px;box-shadow:0 10px 24px rgba(31,157,102,0.45);}
+  .report-fab:active{transform:translateX(-50%) scale(0.95);}
+
+  .side-fabs{position:absolute;right:14px;bottom:100px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  .fab-sm{width:46px;height:46px;border-radius:50%;background:var(--paper-card);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.32);color:var(--ink);}
+  .fab-sm:active{transform:scale(0.93);}
+
+  /* ---- markers (pin style) ---- */
+  .pin-wrap{width:38px;height:48px;position:relative;color:#fff;}
+  .pin-svg{position:absolute;top:0;left:0;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5));}
+  .pin-icon{position:absolute;top:8px;left:50%;transform:translateX(-50%);line-height:1;}
+  .pin-wrap .badge-corner{position:absolute;top:-3px;right:-4px;background:#fff;color:var(--ink);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);}
+  .pin-wrap .zone-corner{position:absolute;top:-3px;left:-4px;background:#fff;color:var(--ink);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);font-family:"Archivo",sans-serif;font-weight:800;font-size:7.5px;}
+  .pin-wrap .size-corner{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:rgba(18,22,28,0.9);color:#fff;border-radius:6px;font-family:"Archivo",sans-serif;font-size:8.5px;font-weight:800;padding:0px 4px;}
+  .pin-wrap.blink{animation:pinBlink 1.5s infinite;}
+  @keyframes pinBlink{0%{filter:drop-shadow(0 0 0 var(--glow));}60%{filter:drop-shadow(0 0 9px var(--glow));}100%{filter:drop-shadow(0 0 0 var(--glow));}}
+  .pin-wrap.pending .pin-svg{opacity:0.6;}
+  .pin-wrap.pending{animation:pinPulse 2.4s infinite;}
+  @keyframes pinPulse{0%{opacity:0.62;}50%{opacity:1;}100%{opacity:0.62;}}
+  .pending-tooltip{background:var(--ink) !important;color:#fff !important;border:none !important;border-radius:100px !important;padding:4px 10px !important;font-size:11px !important;font-weight:700 !important;box-shadow:0 4px 12px rgba(0,0,0,0.4) !important;}
+  .pending-tooltip::before{display:none !important;}
+  .radius-circle{stroke:var(--go);stroke-opacity:0.55;fill:var(--go);fill-opacity:0.06;}
+  .me-dot{width:16px;height:16px;border-radius:50%;background:var(--brand);border:3px solid #fff;box-shadow:0 0 0 5px rgba(23,95,209,0.25);}
+
+  /* ---- bottom sheets ---- */
+  .overlay{position:absolute;inset:0;background:rgba(10,12,16,0.55);z-index:1500;opacity:0;pointer-events:none;transition:opacity .25s;}
+  .overlay.open{opacity:1;pointer-events:auto;}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:1600;background:var(--paper-card);border-radius:20px 20px 0 0;padding:10px 20px max(20px,env(safe-area-inset-bottom)) 20px;box-shadow:0 -10px 28px rgba(0,0,0,0.4);transform:translateY(105%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:80vh;overflow-y:auto;color:var(--ink);}
+  .sheet.open{transform:translateY(0);}
+  .sheet-handle{width:34px;height:5px;background:var(--ink);opacity:0.15;border-radius:3px;margin:0 auto 16px auto;}
+  .sheet h3{margin:0 0 14px 0;font-size:19px;font-weight:800;color:var(--ink);}
+
+  .choice-grid{display:flex;gap:9px;margin-bottom:18px;}
+  .choice-btn{flex:1;background:var(--paper-2);border:none;border-radius:14px;padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-soft);}
+  .choice-btn .ic{display:flex;}
+  .choice-btn.active{color:#fff;background:var(--ink);}
+  .choice-btn.active.cat-handicap-sel{background:var(--cat-handicap);}
+  .choice-btn.active.cat-delivery-sel{background:var(--cat-delivery); color:var(--ink);}
+  .choice-btn.active.cat-normal-sel{background:var(--cat-normal);}
+
+  .section-label{font-size:12.5px;color:var(--ink-soft);font-weight:700;margin:0 0 10px 0;}
+  .btn{border:none;border-radius:14px;padding:16px;font-family:"Archivo",sans-serif;font-size:15px;font-weight:800;width:100%;text-align:center;}
+  .btn-primary{background:var(--go);color:#fff;}
+  .btn-primary:active{filter:brightness(0.92);}
+  .btn-ghost{background:var(--paper-2);color:var(--ink);margin-top:8px;}
+  .btn-danger{background:rgba(214,69,69,0.12);color:var(--danger);}
+  .btn span.ic{display:inline-flex;vertical-align:-3px;margin-right:6px;}
+
+  .spot-detail-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .spot-detail-head .ic{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;}
+  .spot-detail-head .txt .t1{font-size:15.5px;font-weight:800;color:var(--ink);}
+  .spot-detail-head .txt .t2{font-size:12.5px;color:var(--ink-soft);}
+  .countdown{font-size:13px;color:var(--ink-soft);margin-bottom:16px;}
+  .countdown strong{color:var(--go);font-family:"Archivo",sans-serif;}
+  .impact-line{background:rgba(31,157,102,0.1);border-radius:12px;padding:10px 12px;font-size:12.5px;color:var(--go-deep);margin-bottom:16px;}
+  .action-row{display:flex;gap:10px;margin-bottom:8px;}
+  .action-row .btn{flex:1;padding:14px;font-size:13.5px;}
+  .thanks-btn{background:var(--paper-2);color:var(--ink);}
+  .thanks-btn:active{background:rgba(31,157,102,0.15);}
+
+  .profile-row{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
+  .profile-row .big-avatar{width:56px;height:56px;border-radius:50%;background:var(--go);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;font-family:"Archivo",sans-serif;}
+  .profile-row .lvl{font-size:13px;color:var(--ink-soft);}
+  .name-input{background:var(--paper-2);border:none;border-radius:12px;padding:11px 12px;color:var(--ink);font-size:14px;width:100%;margin-bottom:16px;}
+  .stat-grid{display:flex;gap:10px;margin-bottom:18px;}
+  .stat-box{flex:1;background:var(--paper-2);border-radius:14px;padding:12px;text-align:center;}
+  .stat-box .n{font-size:20px;font-weight:800;color:var(--go);font-family:"Archivo",sans-serif;}
+  .stat-box .l{font-size:10px;color:var(--ink-soft);margin-top:3px;font-weight:600;}
+  .badges-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+  .badge-pill{background:var(--paper-2);border-radius:100px;padding:7px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--ink);}
+  .lb-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .lb-item:last-child{border-bottom:none;}
+  .lb-item .rank{width:22px;font-size:13px;font-weight:800;color:var(--ink-soft);font-family:"Archivo",sans-serif;}
+  .lb-item .lb-name{flex:1;font-size:14px;font-weight:600;color:var(--ink);}
+  .lb-item.me .lb-name{color:var(--go-deep);}
+  .lb-item .lb-pts{font-size:13px;color:var(--ink-soft);font-weight:700;}
+
+  .toast{position:absolute;left:50%;bottom:112px;transform:translateX(-50%);z-index:1800;background:var(--paper-card);border-radius:100px;padding:11px 18px;font-size:13px;font-weight:700;color:var(--ink);box-shadow:0 8px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .3s, transform .3s;white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  .prompt-banner{position:absolute;left:16px;right:16px;bottom:112px;z-index:1750;background:var(--paper-card);border-radius:16px;padding:14px 16px;box-shadow:0 10px 26px rgba(0,0,0,0.45);display:none;flex-direction:column;gap:10px;opacity:0;transform:translateY(14px);transition:opacity .25s, transform .25s;border-left:4px solid var(--brand);}
+  .prompt-banner.show{opacity:1;transform:translateY(0);}
+  .prompt-text{font-size:14px;font-weight:800;color:var(--ink);font-family:"Archivo",sans-serif;}
+  .prompt-actions{display:flex;gap:8px;}
+  .prompt-actions .btn{padding:11px;font-size:13px;margin-top:0;}
+
+  .social-proof{pointer-events:none;align-self:flex-start;font-size:11.5px;color:#c7ccd6;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.6);padding:0 4px;}
+
+  .detailed-report-btn{position:absolute;left:calc(50% - 108px);bottom:38px;z-index:1000;width:46px;height:46px;border-radius:50%;background:var(--paper-card);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.32);color:var(--ink);}
+  .detailed-report-btn:active{transform:scale(0.93);}
+
+  .leaflet-control-attribution{background:rgba(15,19,25,0.7) !important;color:#8993a4 !important;font-size:10px !important;}
+  .leaflet-control-attribution a{color:#8993a4 !important;}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="top-bar">
+  <div class="hero-row">
+    <div class="hero-stat" id="resultChip">
+      <span class="num" id="heroNum">0</span>
+      <span class="lbl" id="heroLabel">place(s) disponible(s)</span>
+    </div>
+    <div class="profile-chip" id="profileBtn">
+      <div class="avatar" id="profAvatarMini">?</div>
+      <div class="pts" id="profPtsMini">0 pts</div>
+    </div>
+  </div>
+  <div class="search-row">
+    <div class="search-pill">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="searchInput" type="text" placeholder="Chercher une adresse…" autocomplete="off">
+    </div>
+    <button class="icon-btn" id="locateBtn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+    <button class="icon-btn" id="manualPinBtn" title="Définir ma position manuellement">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-7.4 7-12.5A7 7 0 105 9.5C5 14.6 12 22 12 22z"/><circle cx="12" cy="9.5" r="2.4"/></svg>
+    </button>
+  </div>
+  <div class="suggestions" id="suggestions"></div>
+  <div class="control-row">
+    <span>Rayon : <strong id="radiusVal">400 m</strong></span>
+    <input type="range" id="radiusSlider" min="100" max="2000" step="100" value="400">
+  </div>
+  <div class="control-row" id="zoneFilterRow" style="gap:8px;">
+    <span>Zones :</span>
+    <div class="zone-filter-chip active" data-zone="free">0€</div>
+    <div class="zone-filter-chip active" data-zone="paid">€</div>
+    <div class="zone-filter-chip active" data-zone="blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div>
+  </div>
+  <div class="social-proof" id="socialProof"></div>
+</div>
+
+<div class="side-fabs"></div>
+
+<button class="detailed-report-btn" id="detailedReportBtn" title="Signalement détaillé">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M17 6h3M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="13" cy="6" r="2" fill="var(--paper-card)"/><circle cx="8" cy="12" r="2" fill="var(--paper-card)"/><circle cx="16" cy="18" r="2" fill="var(--paper-card)"/></svg>
+</button>
+<button class="report-fab" id="reportFab">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  Signaler une place
+</button>
+
+<div class="prompt-banner" id="autoPromptBanner">
+  <div class="prompt-text" id="autoPromptText"></div>
+  <div class="prompt-actions" id="autoPromptActions"></div>
+</div>
+
+<div class="overlay" id="overlay"></div>
+
+<!-- REPORT SHEET -->
+<div class="sheet" id="reportSheet">
+  <div class="sheet-handle"></div>
+  <h3>Signaler une place</h3>
+  <div id="reportTypeSection">
+    <p class="section-label">Type de signalement</p>
+    <div class="choice-grid" id="reportTypeChoice">
+      <div class="choice-btn active" data-val="immediate"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Déjà libre</div>
+      <div class="choice-btn" data-val="leaving"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/></svg></span>Je pars bientôt</div>
+    </div>
+  </div>
+  <div id="delaySection" style="display:none;">
+    <p class="section-label">Je pars dans…</p>
+    <div class="choice-grid" id="delayChoice">
+      <div class="choice-btn active" data-val="0">Maintenant</div>
+      <div class="choice-btn" data-val="2">2 min</div>
+      <div class="choice-btn" data-val="5">5 min</div>
+      <div class="choice-btn" data-val="10">10 min</div>
+    </div>
+  </div>
+  <p class="section-label">Type de véhicule</p>
+  <div class="choice-grid" id="vehicleChoice">
+    <div class="choice-btn active" data-val="car"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/></svg></span>Voiture</div>
+    <div class="choice-btn" data-val="moto"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M8 17.5h5l2-5h3"/><path d="M13 12.5l-2-3H7"/><path d="M15 17.5l-1.5-6"/></svg></span>2 roues</div>
+  </div>
+  <p class="section-label">Taille de la place</p>
+  <div class="choice-grid" id="sizeChoice">
+    <div class="choice-btn active" data-val="S">S</div>
+    <div class="choice-btn" data-val="M">M</div>
+    <div class="choice-btn" data-val="L">L</div>
+  </div>
+  <p class="section-label">Catégorie</p>
+  <div class="choice-grid" id="catChoice">
+    <div class="choice-btn active cat-normal-sel" data-val="normal"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Normale</div>
+    <div class="choice-btn" data-val="handicap"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="19" r="3"/><circle cx="9" cy="5" r="1.6" fill="currentColor" stroke="none"/><path d="M9 8v5l4 2 3 5"/><path d="M9 12h5"/></svg></span>Handicapé</div>
+    <div class="choice-btn" data-val="delivery"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M3 8v8l9 4 9-4V8"/><path d="M12 12v8"/></svg></span>Livraison</div>
+  </div>
+  <p class="section-label">Type de zone</p>
+  <div class="choice-grid" id="zoneChoice">
+    <div class="choice-btn active" data-val="free" style="font-family:Archivo,sans-serif;">0€<span style="font-family:-apple-system,sans-serif;font-weight:700;">Gratuite</span></div>
+    <div class="choice-btn" data-val="paid" style="font-family:Archivo,sans-serif;">€<span style="font-family:-apple-system,sans-serif;font-weight:700;">Payante</span></div>
+    <div class="choice-btn" data-val="blue"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span>Zone bleue</div>
+  </div>
+  <button class="btn btn-primary" id="confirmReportBtn">Publier au niveau de ma position</button>
+  <button class="btn btn-ghost" id="cancelReportBtn">Annuler</button>
+</div>
+
+<!-- SPOT DETAIL SHEET -->
+<div class="sheet" id="detailSheet">
+  <div class="sheet-handle"></div>
+  <div class="spot-detail-head">
+    <div class="ic" id="detailIcon"></div>
+    <div class="txt">
+      <div class="t1" id="detailTitle">Place voiture</div>
+      <div class="t2" id="detailSub">Signalée il y a --</div>
+    </div>
+  </div>
+  <div class="countdown">Disparaît dans <strong id="detailCountdown">--</strong> si personne ne confirme</div>
+  <div class="impact-line" id="detailImpact">Cette place a déjà aidé 0 personne(s) à éviter de tourner en rond.</div>
+  <div id="pendingInfo" style="display:none;" class="impact-line">Un conducteur va libérer cette place. Repassez au bon moment !</div>
+  <div id="pendingOwnerActions" style="display:none;">
+    <button class="btn btn-primary" id="leaveNowBtn">Je suis parti — libérer maintenant</button>
+    <button class="btn btn-danger" id="cancelPendingBtn" style="margin-top:8px;">Annuler mon signalement</button>
+  </div>
+  <div id="freeActions">
+    <p class="section-label">Toujours libre ?</p>
+    <div class="action-row">
+      <button class="btn btn-primary" id="stillThereBtn">Oui, toujours là</button>
+      <button class="btn btn-danger" id="takenBtn">Prise</button>
+    </div>
+    <button class="btn thanks-btn" id="thanksBtn"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21s-7-4.4-9.5-8.8C1 8.9 2.4 6 5.4 6c1.8 0 3.1 1 3.6 2.3C9.5 7 10.8 6 12.6 6c3 0 4.4 2.9 2.9 6.2C17.5 16.6 12 21 12 21z"/></svg></span>Merci pour l'info</button>
+  </div>
+  <button class="btn btn-ghost" id="closeDetailBtn">Fermer</button>
+</div>
+
+<!-- PROFILE SHEET -->
+<div class="sheet" id="profileSheet">
+  <div class="sheet-handle"></div>
+  <div class="profile-row">
+    <div class="big-avatar" id="profAvatar">?</div>
+    <div>
+      <div style="font-size:17px;font-weight:800;font-family:Archivo,sans-serif;" id="profName">Contributeur</div>
+      <div class="lvl" id="profLevel">Niveau —</div>
+      <div class="lvl" id="profStreak" style="margin-top:2px;"></div>
+    </div>
+  </div>
+  <input class="name-input" id="nameInput" placeholder="Ton pseudo (visible des autres)">
+  <div class="stat-grid">
+    <div class="stat-box"><div class="n" id="statPoints">0</div><div class="l">POINTS</div></div>
+    <div class="stat-box"><div class="n" id="statContrib">0</div><div class="l">SIGNALEMENTS</div></div>
+    <div class="stat-box"><div class="n" id="statHelped">0</div><div class="l">PERSONNES AIDÉES</div></div>
+  </div>
+  <p class="section-label">Badges</p>
+  <div class="badges-row" id="badgesRow"></div>
+  <p class="section-label">Classement de la communauté</p>
+  <div id="leaderboardList"></div>
+  <button class="btn btn-ghost" id="closeProfileBtn">Fermer</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  const EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+  const ICON_PATHS = {
+    car: '<path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/>',
+    moto: '<circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M8 17.5h5l2-5h3"/><path d="M13 12.5l-2-3H7"/><path d="M15 17.5l-1.5-6"/>',
+    wheelchair: '<circle cx="17" cy="19" r="3"/><circle cx="9" cy="5" r="1.6" fill="currentColor" stroke="none"/><path d="M9 8v5l4 2 3 5"/><path d="M9 12h5"/>',
+    box: '<path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M3 8v8l9 4 9-4V8"/><path d="M12 12v8"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    flame: '<path d="M12 2s5 5 5 10a5 5 0 0 1-10 0c0-1.6.6-2.8 1.3-3.8.1 1.3 1 2.3 2.2 2.3a1.9 1.9 0 0 0 1.9-2c0-1.8-1.4-2.7-1.4-5.3.3-.4.6-.9 1-1.2z" fill="currentColor" stroke="none"/>'
+  };
+  function svg(name, size, sw){
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[name]}</svg>`;
+  }
+
+  // ---- auto-detection : arrêt prolongé (>1min30) puis reprise du mouvement ----
+  const STOP_RADIUS = 15;          // m : rester dans ce rayon = "toujours au même endroit"
+  const LEAVE_DISTANCE = 30;       // m : distance pour considérer qu'on a vraiment quitté l'endroit
+  const STOP_THRESHOLD_MS = 90 * 1000; // 1min30
+  let stopAnchor = null, stopStartTime = null, hadQualifyingStop = false, lastLeavePromptTs = 0;
+  let bannerActive = false;
+  let promptedProximityIds = new Set();
+  let editingSpotId = null;
+  let myThanksSnapshot = {};
+  let snapshotInitialized = false;
+
+  const CAT_META = {
+    normal:   { color:'#1F9D66', label:'Normale' },
+    handicap: { color:'#2E86DE', label:'Handicapé', corner: svg('wheelchair',10,2) },
+    delivery: { color:'#F2B705', label:'Livraison', corner: svg('box',10,2) }
+  };
+  const VEH_ICON = { car: svg('car',16,1.9), moto: svg('moto',16,1.9) };
+  const VEH_ICON_BIG = { car: svg('car',24,1.7), moto: svg('moto',24,1.7) };
+  const ZONE_META = {
+    free: { badge:'0€', label:'Gratuite' },
+    paid: { badge:'€', label:'Payante' },
+    blue: { badge: svg('clock',10,2), label:'Zone bleue (disque)' }
+  };
+  let activeZoneFilters = new Set(['free','paid','blue']);
+  const LEVELS = [
+    {min:0, name:'Débutant'}, {min:20, name:'Contributeur'}, {min:50, name:'Habitué du quartier'},
+    {min:100, name:'Expert stationnement'}, {min:250, name:'Héros de la rue'}
+  ];
+  const BADGES = [
+    {id:'first', label:'Premier signalement', check: p => p.contrib >= 1},
+    {id:'ten', label:'10 signalements', check: p => p.contrib >= 10},
+    {id:'helper', label:'5 confirmations', check: p => p.confirms >= 5},
+    {id:'hero', label:'50 personnes aidées', check: p => p.helped >= 50},
+  ];
+
+  let map = L.map('map', { zoomControl:false }).setView([48.8566,2.3522], 15);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:20, attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+
+  let myPos = null;
+  let focusPoint = null;
+  let radius = 400;
+  let radiusCircle = null;
+  let meMarker = null;
+  let markers = {};
+  let state = { spots: [], leaderboard: {} };
+  let identity = { deviceId: null, name: 'Contributeur' };
+  let selected = { vehicle:'car', size:'S', cat:'normal', zone:'free', reportType:'immediate', delay:'0' };
+  let openSpotId = null;
+
+  const $ = id => document.getElementById(id);
+  const toastEl = $('toast');
+  function toast(msg, ms){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(()=>toastEl.classList.remove('show'), ms||2600);
+  }
+
+  function uuid(){
+    if(crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxx-xxxx-xxxx'.replace(/x/g, ()=> (Math.random()*16|0).toString(16));
+  }
+
+  // ---------- prompt banner (suggestions contextuelles) ----------
+  const bannerEl = () => $('autoPromptBanner');
+  function showPromptBanner(opts){
+    if(bannerActive) return;
+    if(document.querySelector('.sheet.open')) return;
+    bannerActive = true;
+    const banner = bannerEl();
+    $('autoPromptText').textContent = opts.text;
+    const actions = $('autoPromptActions');
+    actions.innerHTML = '';
+    let timer;
+    const cleanup = () => {
+      banner.classList.remove('show');
+      clearTimeout(timer);
+      setTimeout(()=>{ banner.style.display='none'; bannerActive=false; }, 250);
+    };
+    (opts.buttons||[]).forEach(b=>{
+      const btn = document.createElement('button');
+      btn.className = 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost');
+      btn.textContent = b.label;
+      btn.addEventListener('click', ()=>{ cleanup(); b.onClick && b.onClick(); });
+      actions.appendChild(btn);
+    });
+    banner.style.display = 'flex';
+    requestAnimationFrame(()=> banner.classList.add('show'));
+    timer = setTimeout(()=>{ cleanup(); opts.onTimeout && opts.onTimeout(); }, opts.timeoutMs || 12000);
+  }
+
+  // ---------- streak ----------
+  function bumpStreak(me){
+    const todayKey = new Date().toISOString().slice(0,10);
+    if(me.lastActiveDate === todayKey) return;
+    const y = new Date(); y.setDate(y.getDate()-1);
+    const yesterdayKey = y.toISOString().slice(0,10);
+    me.streak = (me.lastActiveDate === yesterdayKey) ? (me.streak||0)+1 : 1;
+    me.lastActiveDate = todayKey;
+  }
+
+  // ---------- compteur social hebdomadaire ----------
+  function isoWeekKey(d){
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = (date.getUTCDay()+6)%7;
+    date.setUTCDate(date.getUTCDate()-dayNum+3);
+    const firstThursday = new Date(Date.UTC(date.getUTCFullYear(),0,4));
+    const weekNum = 1 + Math.round(((date-firstThursday)/86400000 - 3 + ((firstThursday.getUTCDay()+6)%7))/7);
+    return `${date.getUTCFullYear()}-W${weekNum}`;
+  }
+  function bumpWeeklyCount(){
+    const key = isoWeekKey(new Date());
+    if(!state.weekly || state.weekly.key !== key) state.weekly = { key, count:0 };
+    state.weekly.count++;
+  }
+  function updateSocialProof(){
+    const key = isoWeekKey(new Date());
+    const count = (state.weekly && state.weekly.key===key) ? state.weekly.count : 0;
+    $('socialProof').textContent = count > 0 ? `${count} signalement(s) cette semaine dans la communauté` : 'Sois le premier à signaler cette semaine !';
+  }
+
+  // ---------- notification "merci reçu" (quasi temps réel via polling) ----------
+  function checkThanksNotifications(){
+    (state.spots||[]).forEach(spot=>{
+      if(spot.reporterId === identity.deviceId){
+        const prev = myThanksSnapshot[spot.id] || 0;
+        if(snapshotInitialized && (spot.thanks||0) > prev){
+          toast('Quelqu\'un vient de vous remercier pour une place ! (+2 pts)');
+        }
+        myThanksSnapshot[spot.id] = spot.thanks||0;
+      }
+    });
+    snapshotInitialized = true;
+  }
+
+  // ---------- storage ----------
+  async function loadIdentity(){
+    try{
+      const r = await window.storage.get('identity', false);
+      if(r && r.value){ identity = JSON.parse(r.value); return; }
+    }catch(e){}
+    identity = { deviceId: uuid(), name: 'Contributeur' + Math.floor(Math.random()*900+100) };
+    try{ await window.storage.set('identity', JSON.stringify(identity), false); }catch(e){}
+  }
+  async function saveIdentity(){
+    try{ await window.storage.set('identity', JSON.stringify(identity), false); }catch(e){}
+  }
+  async function loadState(){
+    try{
+      const r = await window.storage.get('app-state', true);
+      if(r && r.value){ state = JSON.parse(r.value); }
+    }catch(e){ state = { spots: [], leaderboard: {} }; }
+    pruneExpired();
+  }
+  async function saveState(){
+    pruneExpired();
+    try{ await window.storage.set('app-state', JSON.stringify(state), true); }catch(e){ toast('Sauvegarde impossible'); }
+    updateProfileChip();
+  }
+  function freeAt(spot){ return spot.reportType === 'leaving' ? spot.leaveAt : spot.ts; }
+  function isPending(spot){ return Date.now() < freeAt(spot); }
+
+  function pruneExpired(){
+    const now = Date.now();
+    state.spots = (state.spots||[]).filter(s => now - freeAt(s) < EXPIRY_MS);
+  }
+
+  function myEntry(){
+    if(!state.leaderboard[identity.deviceId]){
+      state.leaderboard[identity.deviceId] = { name: identity.name, points:0, contrib:0, confirms:0, helped:0 };
+    }
+    state.leaderboard[identity.deviceId].name = identity.name;
+    return state.leaderboard[identity.deviceId];
+  }
+
+  function updateProfileChip(){
+    const me = myEntry();
+    $('profAvatarMini').textContent = (identity.name||'?').slice(0,1).toUpperCase();
+    $('profPtsMini').innerHTML = me.points + ' pts' + ((me.streak||0) >= 2 ? ` · ${svg('flame',11,0)}${me.streak}` : '');
+  }
+
+  // ---------- map / geoloc ----------
+  const meIcon = L.divIcon({ className:'', iconSize:[16,16], html:'<div class="me-dot"></div>' });
+
+  function startGeo(){
+    if(!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(pos => {
+      myPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      if(!focusPoint) setFocus(myPos, 15);
+      placeMeMarker();
+    }, err => {
+      let msg = 'Position indisponible — utilise l\'icône repère pour la placer manuellement';
+      if(err && err.code === 1) msg = 'Localisation refusée — autorise-la dans les réglages, ou place-la manuellement';
+      if(err && err.code === 3) msg = 'Localisation trop lente — place ta position manuellement';
+      toast(msg, 4000);
+    }, { enableHighAccuracy:true, timeout:10000 });
+
+    navigator.geolocation.watchPosition(pos => {
+      myPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      placeMeMarker();
+      handleNewPosition(myPos.lat, myPos.lon, Date.now());
+      checkProximityPrompts();
+    }, ()=>{}, { enableHighAccuracy:true, maximumAge:2000 });
+  }
+
+  function handleNewPosition(lat, lon, t){
+    if(!stopAnchor){ stopAnchor = {lat,lon}; stopStartTime = t; hadQualifyingStop = false; return; }
+    const d = haversine(stopAnchor.lat, stopAnchor.lon, lat, lon);
+    if(d <= STOP_RADIUS){
+      if(!hadQualifyingStop && (t - stopStartTime) >= STOP_THRESHOLD_MS){
+        hadQualifyingStop = true;
+      }
+    } else if(d > LEAVE_DISTANCE){
+      if(hadQualifyingStop && (t - lastLeavePromptTs) > 5*60*1000){
+        const anchorSnapshot = { lat: stopAnchor.lat, lon: stopAnchor.lon };
+        lastLeavePromptTs = t;
+        showPromptBanner({
+          text: 'Tu viens de quitter une place ?',
+          buttons: [
+            { label:'Oui, la signaler', primary:true, onClick: ()=> quickPublish(anchorSnapshot, {vehicle:'car',size:'S',cat:'normal',zone:'free'}) },
+            { label:'Non', onClick: ()=>{} }
+          ],
+          timeoutMs: 12000
+        });
+      }
+      stopAnchor = {lat,lon}; stopStartTime = t; hadQualifyingStop = false;
+    }
+  }
+
+  function checkProximityPrompts(){
+    if(bannerActive || !myPos) return;
+    const PROX_RADIUS = 30;
+    for(const spot of (state.spots||[])){
+      if(spot.reporterId === identity.deviceId) continue;
+      if(isPending(spot)) continue;
+      if(promptedProximityIds.has(spot.id)) continue;
+      const d = haversine(myPos.lat, myPos.lon, spot.lat, spot.lon);
+      if(d <= PROX_RADIUS){
+        promptedProximityIds.add(spot.id);
+        showPromptBanner({
+          text: 'Place signalée tout près — encore là ?',
+          buttons: [
+            { label:'Oui, toujours là', primary:true, onClick: ()=> quickStillThere(spot.id) },
+            { label:'Prise', onClick: ()=> quickTaken(spot.id) }
+          ],
+          timeoutMs: 15000
+        });
+        break;
+      }
+    }
+  }
+  function placeMeMarker(){
+    if(!meMarker) meMarker = L.marker([myPos.lat, myPos.lon], { icon: meIcon, zIndexOffset:500 }).addTo(map);
+    else meMarker.setLatLng([myPos.lat, myPos.lon]);
+  }
+
+  function setFocus(pt, zoom){
+    focusPoint = pt;
+    map.setView([pt.lat, pt.lon], zoom || map.getZoom());
+    drawRadiusCircle();
+    renderMarkers();
+  }
+
+  function drawRadiusCircle(){
+    if(!focusPoint) return;
+    if(radiusCircle) map.removeLayer(radiusCircle);
+    radiusCircle = L.circle([focusPoint.lat, focusPoint.lon], { radius, className:'radius-circle', color:'#1F9D66', weight:1.5, fillColor:'#1F9D66', fillOpacity:0.06 }).addTo(map);
+  }
+
+  function haversine(lat1,lon1,lat2,lon2){
+    const R=6371000, toRad=x=>x*Math.PI/180;
+    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+    const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function spotIconHtml(spot){
+    const meta = CAT_META[spot.cat];
+    const veh = VEH_ICON[spot.vehicle];
+    const corner = meta.corner ? `<div class="badge-corner">${meta.corner}</div>` : '';
+    const zoneBadge = `<div class="zone-corner">${ZONE_META[spot.zone||'free'].badge}</div>`;
+    const pending = isPending(spot);
+    const stateClass = pending ? 'pending' : 'blink';
+    return `<div class="pin-wrap ${stateClass}" style="--glow:${meta.color}">
+      <svg class="pin-svg" width="38" height="48" viewBox="0 0 38 48" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 1C10.2 1 3 8.3 3 17.5c0 12.3 16 29 16 29s16-16.7 16-29C35 8.3 27.8 1 19 1z" fill="${meta.color}" stroke="#12161C" stroke-width="2"/>
+      </svg>
+      <div class="pin-icon">${veh}</div>
+      ${corner}
+      ${zoneBadge}
+      <div class="size-corner">${spot.size}</div>
+    </div>`;
+  }
+
+  function renderMarkers(){
+    if(!focusPoint) return;
+    const activeIds = new Set();
+    let freeCount = 0, pendingCount = 0;
+    (state.spots||[]).forEach(spot => {
+      const d = haversine(focusPoint.lat, focusPoint.lon, spot.lat, spot.lon);
+      if(d > radius) return;
+      if(!activeZoneFilters.has(spot.zone||'free')) return;
+      activeIds.add(spot.id);
+      const pending = isPending(spot);
+      if(pending) pendingCount++; else freeCount++;
+      const icon = L.divIcon({ className:'', iconSize:[38,48], iconAnchor:[19,48], html: spotIconHtml(spot) });
+      if(markers[spot.id]){
+        markers[spot.id].setLatLng([spot.lat, spot.lon]);
+        markers[spot.id].setIcon(icon);
+        updatePendingTooltip(markers[spot.id], spot, pending);
+      } else {
+        const m = L.marker([spot.lat, spot.lon], { icon }).addTo(map);
+        m.on('click', () => openDetail(spot.id));
+        updatePendingTooltip(m, spot, pending);
+        markers[spot.id] = m;
+      }
+    });
+    Object.keys(markers).forEach(id => {
+      if(!activeIds.has(id)){ map.removeLayer(markers[id]); delete markers[id]; }
+    });
+    $('heroNum').textContent = pendingCount > 0 ? `${freeCount} + ${pendingCount}` : freeCount;
+    $('heroLabel').textContent = pendingCount > 0 ? 'libres · bientôt libres' : 'place(s) disponible(s)';
+  }
+
+  function updatePendingTooltip(marker, spot, pending){
+    if(pending){
+      const remainMin = Math.max(0, Math.ceil((freeAt(spot)-Date.now())/60000));
+      const text = `libère dans ${remainMin} min`;
+      if(marker._pendingTooltip){ marker.setTooltipContent(text); }
+      else { marker.bindTooltip(text, { permanent:true, direction:'top', offset:[0,-44], className:'pending-tooltip' }); marker._pendingTooltip = true; }
+    } else if(marker._pendingTooltip){
+      marker.unbindTooltip();
+      marker._pendingTooltip = false;
+    }
+  }
+
+  // ---------- search (Nominatim) ----------
+  const searchInput = $('searchInput');
+  const suggestionsEl = $('suggestions');
+  let searchTimer = null;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if(q.length < 3){ suggestionsEl.classList.remove('open'); suggestionsEl.innerHTML=''; return; }
+    searchTimer = setTimeout(()=>doSearch(q), 380);
+  });
+  async function doSearch(q){
+    try{
+      let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+      if(myPos){ const d=0.4; url += `&viewbox=${myPos.lon-d},${myPos.lat+d},${myPos.lon+d},${myPos.lat-d}&bounded=0`; }
+      const res = await fetch(url, { headers:{ 'Accept-Language':'fr' } });
+      const data = await res.json();
+      renderSuggestions(data);
+    }catch(e){ suggestionsEl.innerHTML = '<div class="sugg-item"><div class="name">Recherche indisponible</div></div>'; suggestionsEl.classList.add('open'); }
+  }
+  function renderSuggestions(list){
+    if(!list.length){ suggestionsEl.innerHTML='<div class="sugg-item"><div class="name">Aucun résultat</div></div>'; suggestionsEl.classList.add('open'); return; }
+    suggestionsEl.innerHTML = list.map((item,i)=>{
+      const parts = item.display_name.split(',');
+      return `<div class="sugg-item" data-i="${i}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-7.4 7-12.5A7 7 0 105 9.5C5 14.6 12 22 12 22z"/></svg><div><div class="name">${parts[0]}</div><div class="addr">${parts.slice(1,3).join(',').trim()}</div></div></div>`;
+    }).join('');
+    suggestionsEl.classList.add('open');
+    suggestionsEl.querySelectorAll('.sugg-item[data-i]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const item = list[+el.dataset.i];
+        searchInput.value = item.display_name.split(',')[0];
+        suggestionsEl.classList.remove('open');
+        setFocus({ lat: parseFloat(item.lat), lon: parseFloat(item.lon) }, 16);
+      });
+    });
+  }
+  $('locateBtn').addEventListener('click', () => {
+    if(myPos){ setFocus(myPos, 16); searchInput.value=''; }
+    else startGeo();
+  });
+
+  let manualPinMode = false;
+  $('manualPinBtn').addEventListener('click', () => {
+    manualPinMode = true;
+    toast('Touche la carte à l\'endroit où tu te trouves', 3500);
+  });
+  map.on('click', (e) => {
+    suggestionsEl.classList.remove('open');
+    if(manualPinMode){
+      manualPinMode = false;
+      myPos = { lat: e.latlng.lat, lon: e.latlng.lng };
+      stopAnchor = null; hadQualifyingStop = false;
+      placeMeMarker();
+      if(!focusPoint) setFocus(myPos, 16); else renderMarkers();
+      toast('Position définie manuellement');
+    }
+  });
+
+  // ---------- radius ----------
+  const radiusSlider = $('radiusSlider');
+  radiusSlider.addEventListener('input', () => {
+    radius = parseInt(radiusSlider.value, 10);
+    $('radiusVal').textContent = radius >= 1000 ? (radius/1000).toFixed(1)+' km' : radius+' m';
+    drawRadiusCircle();
+    renderMarkers();
+  });
+
+  document.querySelectorAll('.zone-filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const z = chip.dataset.zone;
+      if(activeZoneFilters.has(z)){ activeZoneFilters.delete(z); chip.classList.remove('active'); }
+      else { activeZoneFilters.add(z); chip.classList.add('active'); }
+      renderMarkers();
+    });
+  });
+
+  // ---------- overlay / sheets ----------
+  const overlay = $('overlay');
+  function openSheet(el){ overlay.classList.add('open'); el.classList.add('open'); }
+  function closeSheets(){ overlay.classList.remove('open'); document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open')); openSpotId=null; }
+  overlay.addEventListener('click', closeSheets);
+
+  // ---------- report flow ----------
+  function wireChoice(groupId, key){
+    document.querySelectorAll(`#${groupId} .choice-btn`).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll(`#${groupId} .choice-btn`).forEach(b=>b.classList.remove('active','cat-handicap-sel','cat-delivery-sel','cat-normal-sel'));
+        btn.classList.add('active');
+        if(key==='cat') btn.classList.add('cat-'+btn.dataset.val+'-sel');
+        selected[key] = btn.dataset.val;
+      });
+    });
+  }
+  wireChoice('vehicleChoice','vehicle');
+  wireChoice('sizeChoice','size');
+  wireChoice('catChoice','cat');
+  wireChoice('zoneChoice','zone');
+  wireChoice('delayChoice','delay');
+
+  document.querySelectorAll('#reportTypeChoice .choice-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#reportTypeChoice .choice-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      selected.reportType = btn.dataset.val;
+      $('delaySection').style.display = selected.reportType === 'leaving' ? 'block' : 'none';
+      $('confirmReportBtn').textContent = selected.reportType === 'leaving' ? 'Publier mon départ imminent' : 'Publier au niveau de ma position';
+    });
+  });
+
+  $('reportFab').addEventListener('click', () => {
+    if(!myPos){ toast('Active ta position pour signaler une place'); startGeo(); return; }
+    quickPublish();
+  });
+  $('cancelReportBtn').addEventListener('click', () => { editingSpotId=null; resetReportSheetToDefault(); closeSheets(); });
+
+  async function quickPublish(overridePos, overrideValues){
+    const pos = overridePos || myPos;
+    if(!pos) return;
+    const vals = overrideValues || {vehicle:'car',size:'S',cat:'normal',zone:'free'};
+    const now = Date.now();
+    const spot = {
+      id: uuid(), lat: pos.lat, lon: pos.lon,
+      vehicle: vals.vehicle, size: vals.size, cat: vals.cat, zone: vals.zone,
+      reportType:'immediate', leaveAt: now, ts: now,
+      reporterId: identity.deviceId, reporterName: identity.name,
+      thanks:0, confirmedCount:0
+    };
+    state.spots.push(spot);
+    const me = myEntry();
+    me.points += 10; me.contrib += 1;
+    bumpStreak(me);
+    bumpWeeklyCount();
+    await saveState();
+    renderMarkers();
+    updateSocialProof();
+    showPromptBanner({
+      text: 'Place publiée avec les valeurs par défaut (+10 pts)',
+      buttons: [
+        { label:'Ajuster les détails', primary:true, onClick: ()=> openReportSheetForEdit(spot.id) },
+        { label:'OK', onClick: ()=>{} }
+      ],
+      timeoutMs: 6000
+    });
+  }
+
+  function setChoiceActive(groupId, val){
+    document.querySelectorAll(`#${groupId} .choice-btn`).forEach(b=>{
+      b.classList.toggle('active', b.dataset.val===val);
+      if(groupId==='catChoice'){
+        b.classList.remove('cat-handicap-sel','cat-delivery-sel','cat-normal-sel');
+        if(b.dataset.val===val) b.classList.add('cat-'+val+'-sel');
+      }
+    });
+  }
+
+  function resetReportSheetToDefault(){
+    $('reportTypeSection').style.display = '';
+    setChoiceActive('reportTypeChoice','immediate'); selected.reportType='immediate';
+    $('delaySection').style.display = 'none';
+    setChoiceActive('vehicleChoice','car'); selected.vehicle='car';
+    setChoiceActive('sizeChoice','S'); selected.size='S';
+    setChoiceActive('catChoice','normal'); selected.cat='normal';
+    setChoiceActive('zoneChoice','free'); selected.zone='free';
+    document.querySelector('#reportSheet h3').textContent = 'Signaler une place';
+    $('confirmReportBtn').textContent = 'Publier au niveau de ma position';
+  }
+
+  function openReportSheetForEdit(spotId){
+    const spot = state.spots.find(s=>s.id===spotId);
+    if(!spot) return;
+    editingSpotId = spotId;
+    $('reportTypeSection').style.display = 'none';
+    $('delaySection').style.display = 'none';
+    setChoiceActive('vehicleChoice', spot.vehicle); selected.vehicle = spot.vehicle;
+    setChoiceActive('sizeChoice', spot.size); selected.size = spot.size;
+    setChoiceActive('catChoice', spot.cat); selected.cat = spot.cat;
+    setChoiceActive('zoneChoice', spot.zone); selected.zone = spot.zone;
+    document.querySelector('#reportSheet h3').textContent = 'Ajuster la place';
+    $('confirmReportBtn').textContent = 'Mettre à jour les détails';
+    openSheet($('reportSheet'));
+  }
+
+  $('detailedReportBtn').addEventListener('click', () => {
+    if(!myPos){ toast('Active ta position pour signaler une place'); startGeo(); return; }
+    editingSpotId = null;
+    resetReportSheetToDefault();
+    openSheet($('reportSheet'));
+  });
+
+  $('confirmReportBtn').addEventListener('click', async () => {
+    if(editingSpotId){
+      const spot = state.spots.find(s=>s.id===editingSpotId);
+      if(spot){ spot.vehicle=selected.vehicle; spot.size=selected.size; spot.cat=selected.cat; spot.zone=selected.zone; }
+      editingSpotId = null;
+      await saveState();
+      resetReportSheetToDefault();
+      closeSheets();
+      renderMarkers();
+      toast('Détails mis à jour');
+      return;
+    }
+    const now = Date.now();
+    const delayMs = selected.reportType === 'leaving' ? parseInt(selected.delay,10) * 60000 : 0;
+    const spot = {
+      id: uuid(), lat: myPos.lat, lon: myPos.lon,
+      vehicle: selected.vehicle, size: selected.size, cat: selected.cat, zone: selected.zone,
+      reportType: selected.reportType, leaveAt: now + delayMs,
+      ts: now, reporterId: identity.deviceId, reporterName: identity.name,
+      thanks: 0, confirmedCount: 0
+    };
+    state.spots.push(spot);
+    const me = myEntry();
+    const bonus = selected.reportType === 'leaving' ? 15 : 10;
+    me.points += bonus; me.contrib += 1;
+    bumpStreak(me);
+    bumpWeeklyCount();
+    await saveState();
+    closeSheets();
+    renderMarkers();
+    updateSocialProof();
+    toast(selected.reportType === 'leaving' ? `Départ programmé — merci ! +${bonus} pts` : `Place publiée — merci ! +${bonus} pts`);
+  });
+
+  // ---------- spot detail ----------
+  let countdownTimer = null;
+  function openDetail(id){
+    const spot = state.spots.find(s=>s.id===id);
+    if(!spot) return;
+    openSpotId = id;
+    $('detailIcon').innerHTML = VEH_ICON_BIG[spot.vehicle];
+    $('detailIcon').style.background = CAT_META[spot.cat].color;
+    $('detailTitle').textContent = `Place ${spot.vehicle==='car'?'voiture':'2 roues'} — ${CAT_META[spot.cat].label} · ${ZONE_META[spot.zone||'free'].label} (${spot.size})`;
+    const mine = spot.reporterId === identity.deviceId;
+    $('thanksBtn').style.display = mine ? 'none' : 'flex';
+    updateDetail();
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(updateDetail, 1000);
+    openSheet($('detailSheet'));
+  }
+  function updateDetail(){
+    const spot = state.spots.find(s=>s.id===openSpotId);
+    if(!spot){ clearInterval(countdownTimer); closeSheets(); return; }
+    const mine = spot.reporterId === identity.deviceId;
+    const pending = isPending(spot);
+    const ageSec = Math.floor((Date.now()-spot.ts)/1000);
+    $('detailSub').textContent = ageSec < 60 ? `Signalée il y a ${ageSec}s` : `Signalée il y a ${Math.floor(ageSec/60)} min`;
+
+    $('pendingInfo').style.display = (pending && !mine) ? 'block' : 'none';
+    $('pendingOwnerActions').style.display = (pending && mine) ? 'block' : 'none';
+    $('freeActions').style.display = pending ? 'none' : 'block';
+    $('detailImpact').style.display = pending ? 'none' : 'block';
+
+    if(pending){
+      const remain = Math.max(0, freeAt(spot) - Date.now());
+      const m = Math.floor(remain/60000), s = Math.floor((remain%60000)/1000);
+      document.querySelector('.countdown').innerHTML = `Se libère dans <strong id="detailCountdown">${m}:${s.toString().padStart(2,'0')}</strong>`;
+    } else {
+      const remain = Math.max(0, EXPIRY_MS - (Date.now()-freeAt(spot)));
+      const m = Math.floor(remain/60000), s = Math.floor((remain%60000)/1000);
+      document.querySelector('.countdown').innerHTML = `Disparaît dans <strong id="detailCountdown">${m}:${s.toString().padStart(2,'0')}</strong> si personne ne confirme`;
+      $('detailImpact').textContent = `Cette place a déjà aidé ${spot.thanks} personne(s) à éviter de tourner en rond.`;
+    }
+  }
+  $('closeDetailBtn').addEventListener('click', ()=>{ clearInterval(countdownTimer); closeSheets(); });
+
+  $('leaveNowBtn').addEventListener('click', async () => {
+    const spot = state.spots.find(s=>s.id===openSpotId);
+    if(!spot) return;
+    spot.leaveAt = Date.now();
+    spot.ts = Date.now();
+    await saveState(); renderMarkers(); updateDetail();
+    toast('Place marquée libre maintenant — merci !');
+  });
+  $('cancelPendingBtn').addEventListener('click', async () => {
+    state.spots = state.spots.filter(s=>s.id!==openSpotId);
+    const me = myEntry(); me.points = Math.max(0, me.points - 5); me.contrib = Math.max(0, me.contrib - 1);
+    await saveState(); renderMarkers();
+    clearInterval(countdownTimer); closeSheets();
+    toast('Signalement annulé');
+  });
+
+  $('stillThereBtn').addEventListener('click', () => quickStillThere(openSpotId));
+  $('takenBtn').addEventListener('click', () => quickTaken(openSpotId));
+  $('thanksBtn').addEventListener('click', () => quickThanks(openSpotId));
+
+  async function quickStillThere(id){
+    const spot = state.spots.find(s=>s.id===id);
+    if(!spot) return;
+    spot.ts = Date.now(); spot.confirmedCount = (spot.confirmedCount||0)+1;
+    const me = myEntry(); me.points += 3; me.confirms = (me.confirms||0)+1; bumpStreak(me);
+    await saveState(); renderMarkers();
+    if(openSpotId===id) updateDetail();
+    toast('Merci d\'avoir confirmé — +3 pts');
+  }
+  async function quickTaken(id){
+    state.spots = state.spots.filter(s=>s.id!==id);
+    const me = myEntry(); me.points += 5; bumpStreak(me);
+    await saveState(); renderMarkers();
+    if(openSpotId===id){ clearInterval(countdownTimer); closeSheets(); }
+    toast('Carte mise à jour — +5 pts, merci !');
+  }
+  async function quickThanks(id){
+    const spot = state.spots.find(s=>s.id===id);
+    if(!spot) return;
+    spot.thanks = (spot.thanks||0)+1;
+    if(state.leaderboard[spot.reporterId]){
+      state.leaderboard[spot.reporterId].points += 2;
+      state.leaderboard[spot.reporterId].helped = (state.leaderboard[spot.reporterId].helped||0)+1;
+    }
+    bumpStreak(myEntry());
+    await saveState();
+    if(openSpotId===id) updateDetail();
+    toast('Merci envoyé !');
+  }
+
+  // ---------- profile ----------
+  function levelFor(points){
+    let lvl = LEVELS[0];
+    for(const l of LEVELS){ if(points >= l.min) lvl = l; }
+    return lvl.name;
+  }
+  function renderProfile(){
+    const me = myEntry();
+    $('profAvatar').textContent = (identity.name||'?').slice(0,1).toUpperCase();
+    $('profName').textContent = identity.name;
+    $('nameInput').value = identity.name;
+    $('profLevel').textContent = 'Niveau : ' + levelFor(me.points);
+    $('profStreak').innerHTML = (me.streak||0) >= 1 ? `${svg('flame',13,0)} Série : ${me.streak} jour(s)` : '';
+    $('statPoints').textContent = me.points;
+    $('statContrib').textContent = me.contrib||0;
+    $('statHelped').textContent = me.helped||0;
+    const earned = BADGES.filter(b=>b.check(me));
+    $('badgesRow').innerHTML = earned.length ? earned.map(b=>`<div class="badge-pill">${b.label}</div>`).join('') : '<div class="badge-pill" style="opacity:.5">Aucun badge pour l\'instant</div>';
+    const ranked = Object.entries(state.leaderboard).sort((a,b)=>b[1].points-a[1].points).slice(0,8);
+    $('leaderboardList').innerHTML = ranked.map(([id,e],i)=>`<div class="lb-item ${id===identity.deviceId?'me':''}"><span class="rank">#${i+1}</span><span class="lb-name">${e.name}${id===identity.deviceId?' (toi)':''}</span><span class="lb-pts">${e.points} pts</span></div>`).join('') || '<div style="color:var(--ink-soft);font-size:13px;">Personne pour l\'instant — sois le premier !</div>';
+    updateProfileChip();
+  }
+  $('profileBtn').addEventListener('click', async () => { await loadState(); renderProfile(); openSheet($('profileSheet')); });
+  $('closeProfileBtn').addEventListener('click', closeSheets);
+  $('nameInput').addEventListener('change', async (e) => {
+    identity.name = e.target.value.trim() || identity.name;
+    await saveIdentity();
+    const me = myEntry(); me.name = identity.name;
+    await saveState();
+    renderProfile();
+  });
+
+  // ---------- polling for live updates ----------
+  setInterval(async () => {
+    await loadState();
+    renderMarkers();
+    checkProximityPrompts();
+    checkThanksNotifications();
+    updateSocialProof();
+    if($('profileSheet').classList.contains('open')) renderProfile();
+  }, 10000);
+
+  // ---------- init ----------
+  (async function init(){
+    await loadIdentity();
+    await loadState();
+    updateProfileChip();
+    checkThanksNotifications();
+    updateSocialProof();
+    startGeo();
+    drawRadiusCircle();
+  })();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>
