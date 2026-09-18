@@ -344,6 +344,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script>
 (function(){
@@ -1359,9 +1360,19 @@
   }, 10000);
 
   // ---------- init ----------
+  let listenersAttached = false;
+  firebase.auth().onAuthStateChanged(user => {
+    if(user && !listenersAttached){
+      listenersAttached = true;
+      attachRealtimeListeners();
+    }
+  });
+  firebase.auth().signInAnonymously().catch(() => {
+    toast('Connexion à la base impossible — réessaie plus tard');
+  });
+
   (async function init(){
     await loadIdentity();
-    attachRealtimeListeners();
     loadFavorites();
     updateProfileChip();
     updateSocialProof();
