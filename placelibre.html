@@ -74,8 +74,11 @@
   .zone-filter-chip.active{opacity:1;background:var(--ink);color:#fff;}
 
   /* ---- FAB report button ---- */
-  .report-fab{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:1000;background:var(--go);color:#fff;border:none;border-radius:100px;padding:16px 26px;font-family:"Archivo",sans-serif;font-size:15px;font-weight:800;display:flex;align-items:center;gap:9px;box-shadow:0 10px 24px rgba(31,157,102,0.45);}
-  .report-fab:active{transform:translateX(-50%) scale(0.95);}
+  .report-row{position:absolute;left:12px;right:12px;bottom:34px;z-index:1000;display:flex;gap:10px;}
+  .report-btn-half{flex:1;border:none;border-radius:100px;padding:15px 8px;font-family:"Archivo",sans-serif;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;color:#fff;}
+  .report-btn-half:active{transform:scale(0.96);}
+  .report-btn-half.go{background:var(--go);box-shadow:0 10px 22px rgba(31,157,102,0.4);}
+  .report-btn-half.leaving{background:var(--brand);box-shadow:0 10px 22px rgba(23,95,209,0.4);}
 
   .side-fabs{position:absolute;right:14px;bottom:100px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
   .fab-sm{width:46px;height:46px;border-radius:50%;background:var(--paper-card);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.32);color:var(--ink);}
@@ -212,15 +215,22 @@
   <div class="social-proof" id="socialProof"></div>
 </div>
 
-<div class="side-fabs"></div>
+<div class="side-fabs">
+  <button class="fab-sm" id="detailedReportBtn" title="Signalement détaillé">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M17 6h3M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="13" cy="6" r="2" fill="var(--paper-card)"/><circle cx="8" cy="12" r="2" fill="var(--paper-card)"/><circle cx="16" cy="18" r="2" fill="var(--paper-card)"/></svg>
+  </button>
+</div>
 
-<button class="detailed-report-btn" id="detailedReportBtn" title="Signalement détaillé">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M17 6h3M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="13" cy="6" r="2" fill="var(--paper-card)"/><circle cx="8" cy="12" r="2" fill="var(--paper-card)"/><circle cx="16" cy="18" r="2" fill="var(--paper-card)"/></svg>
-</button>
-<button class="report-fab" id="reportFab">
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-  Signaler une place
-</button>
+<div class="report-row">
+  <button class="report-btn-half go" id="reportFab">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+    Déjà libre
+  </button>
+  <button class="report-btn-half leaving" id="reportLeavingFab">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/></svg>
+    Je pars
+  </button>
+</div>
 
 <div class="prompt-banner" id="autoPromptBanner">
   <div class="prompt-text" id="autoPromptText"></div>
@@ -1020,7 +1030,50 @@
     if(!myPos){ toast('Active ta position pour signaler une place'); startGeo(); return; }
     quickPublish();
   });
+  $('reportLeavingFab').addEventListener('click', () => {
+    if(!myPos){ toast('Active ta position pour signaler ton départ'); startGeo(); return; }
+    quickPublishLeaving();
+  });
   $('cancelReportBtn').addEventListener('click', () => { editingSpotId=null; resetReportSheetToDefault(); closeSheets(); });
+
+  async function quickPublishLeaving(){
+    const existing = findNearbyActiveSpot(myPos.lat, myPos.lon, 'car');
+    if(existing){
+      existing.confidence = (existing.confidence||1)+1;
+      existing.ts = Date.now();
+      dbRoot.child('spots').child(existing.id).update({ confidence: existing.confidence, ts: existing.ts }).catch(()=>{});
+      const me = myEntry(); me.points += 3; me.confirms = (me.confirms||0)+1; bumpStreak(me);
+      await saveState(); renderMarkers();
+      toast(`Place déjà signalée — confirmée (fiabilité ×${existing.confidence}) +3 pts`);
+      return;
+    }
+    const now = Date.now();
+    const delayMs = 2 * 60000;
+    const spot = {
+      id: uuid(), lat: myPos.lat, lon: myPos.lon,
+      vehicle: 'car', size: null, cat: 'normal', zone: 'free',
+      reportType: 'leaving', leaveAt: now + delayMs, ts: now, confidence: 1,
+      reporterId: identity.deviceId, reporterName: identity.name,
+      thanks: 0, confirmedCount: 0
+    };
+    state.spots.push(spot);
+    dbRoot.child('spots').child(spot.id).set(spot).catch(()=>{});
+    const me = myEntry();
+    me.points += 15; me.contrib += 1;
+    bumpStreak(me);
+    bumpWeeklyCount();
+    await saveState();
+    renderMarkers();
+    updateSocialProof();
+    showPromptBanner({
+      text: 'Départ programmé dans 2 min (+15 pts)',
+      buttons: [
+        { label:'Ajuster (véhicule, taille…)', primary:true, onClick: ()=> openReportSheetForEdit(spot.id) },
+        { label:'OK', onClick: ()=>{} }
+      ],
+      timeoutMs: 6000
+    });
+  }
 
   async function quickPublish(overridePos, overrideValues){
     const pos = overridePos || myPos;
