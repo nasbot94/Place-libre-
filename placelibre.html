@@ -239,11 +239,11 @@
 <div class="report-row">
   <button class="report-btn-half go" id="reportFab">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>
-    Déjà libre
+    La place est libre !
   </button>
   <button class="report-btn-half leaving" id="reportLeavingFab">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/></svg>
-    Je pars
+    Je libère ma place !
   </button>
 </div>
 
@@ -321,7 +321,7 @@
   </div>
   <div class="countdown">Disparaît dans <strong id="detailCountdown">--</strong> si personne ne confirme</div>
   <button class="btn btn-primary" id="navigateBtn" style="margin-bottom:14px;">Itinéraire vers cette place</button>
-  <div class="impact-line" id="detailImpact">Cette place a déjà aidé 0 personne(s) à éviter de tourner en rond.</div>
+  <div class="impact-line" id="detailImpact">Tes contributions ont déjà aidé 0 personne(s) à éviter de tourner en rond !!!</div>
   <div id="pendingInfo" style="display:none;" class="impact-line">Un conducteur va libérer cette place. Repassez au bon moment !</div>
   <div id="pendingOwnerActions" style="display:none;">
     <button class="btn btn-primary" id="leaveNowBtn">Je suis parti — libérer maintenant</button>
@@ -1367,7 +1367,7 @@
       const remain = Math.max(0, EXPIRY_MS - (Date.now()-freeAt(spot)));
       const m = Math.floor(remain/60000), s = Math.floor((remain%60000)/1000);
       document.querySelector('.countdown').innerHTML = `Disparaît dans <strong id="detailCountdown">${m}:${s.toString().padStart(2,'0')}</strong> si personne ne confirme`;
-      $('detailImpact').textContent = `Cette place a déjà aidé ${spot.thanks} personne(s) à éviter de tourner en rond.`;
+      $('detailImpact').textContent = `Tes contributions ont déjà aidé ${myEntry().helped||0} personne(s) à éviter de tourner en rond !!!`;
     }
   }
   $('closeDetailBtn').addEventListener('click', ()=>{ clearInterval(countdownTimer); closeSheets(); });
