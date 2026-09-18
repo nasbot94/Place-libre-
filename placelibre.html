@@ -99,8 +99,8 @@
   .pin-wrap .zone-corner{position:absolute;top:-3px;left:-4px;background:#fff;color:var(--ink);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);font-family:"Archivo",sans-serif;font-weight:800;font-size:7.5px;}
   .pin-wrap .size-corner{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:rgba(18,22,28,0.9);color:#fff;border-radius:6px;font-family:"Archivo",sans-serif;font-size:8.5px;font-weight:800;padding:0px 4px;}
   .pin-wrap .electric-corner{position:absolute;bottom:-4px;right:-4px;background:#F2B705;color:#12161C;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);}
-  .pin-wrap.blink{animation:pinBlink 1.5s infinite;}
-  @keyframes pinBlink{0%{filter:drop-shadow(0 0 0 var(--glow));}60%{filter:drop-shadow(0 0 9px var(--glow));}100%{filter:drop-shadow(0 0 0 var(--glow));}}
+  .pin-wrap.blink{animation:pinBlink 1.6s infinite; transform-origin:50% 100%;}
+  @keyframes pinBlink{0%,100%{opacity:1;transform:scale(1);filter:drop-shadow(0 0 0 var(--glow));}50%{opacity:0.3;transform:scale(1.22);filter:drop-shadow(0 0 16px var(--glow));}}
   .pin-wrap.pending .pin-svg{opacity:0.6;}
   .pin-wrap.pending{animation:pinPulse 2.4s infinite;}
   @keyframes pinPulse{0%{opacity:0.62;}50%{opacity:1;}100%{opacity:0.62;}}
@@ -891,11 +891,12 @@
     const strokeColor = tier === 'trusted' ? '#1F9D66' : tier === 'risky' ? '#D64545' : '#12161C';
     const dashAttr = tier === 'risky' ? 'stroke-dasharray="4 2"' : '';
 
-    let animDuration = '1.5s';
+    let animDuration = '1.6s';
     if(!pending){
       const remainMs = EXPIRY_MS - (Date.now() - freeAt(spot));
-      if(remainMs <= 30000) animDuration = '0.35s';
-      else if(remainMs <= 60000) animDuration = '0.8s';
+      if(remainMs <= 20000) animDuration = '0.25s';
+      else if(remainMs <= 60000) animDuration = '0.5s';
+      else if(remainMs <= 120000) animDuration = '0.9s';
     }
 
     return `<div class="pin-wrap ${stateClass}" style="--glow:${meta.color};animation-duration:${animDuration};">
@@ -915,6 +916,7 @@
     const activeIds = new Set();
     let freeCount = 0, pendingCount = 0;
     (state.spots||[]).forEach(spot => {
+      if(Date.now() - freeAt(spot) >= EXPIRY_MS) return;
       const d = haversine(focusPoint.lat, focusPoint.lon, spot.lat, spot.lon);
       if(d > radius) return;
       if(!activeZoneFilters.has(spot.zone||'free')) return;
@@ -1553,7 +1555,7 @@
   // les places/classement arrivent désormais en temps réel via Firebase ;
   // seule l'heure change pour les alertes événement, d'où cette vérification périodique légère.
   setInterval(checkEventWarnings, 60000);
-  setInterval(() => { if(focusPoint) renderMarkers(); }, 5000);
+  setInterval(() => { pruneExpired(); if(focusPoint) renderMarkers(); }, 5000);
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', () => {
