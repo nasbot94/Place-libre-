@@ -83,6 +83,11 @@
   .report-btn-half.leaving{background:var(--brand);box-shadow:0 10px 22px rgba(23,95,209,0.4);}
 
   .side-fabs{position:absolute;right:14px;bottom:100px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  .map-legend{position:absolute;left:14px;bottom:100px;z-index:1000;background:var(--paper-card);border-radius:12px;padding:8px 12px;box-shadow:0 6px 16px rgba(0,0,0,0.3);font-size:11px;color:var(--ink);display:flex;flex-direction:column;gap:4px;}
+  .map-legend .row{display:flex;align-items:center;gap:6px;}
+  .map-legend .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .map-legend .dot.go{background:var(--go);}
+  .map-legend .dot.pending{background:var(--go);opacity:0.5;}
   .fab-sm{width:46px;height:46px;border-radius:50%;background:var(--paper-card);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.32);color:var(--ink);}
   .fab-sm:active{transform:scale(0.93);}
 
@@ -93,6 +98,7 @@
   .pin-wrap .badge-corner{position:absolute;top:-3px;right:-4px;background:#fff;color:var(--ink);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);}
   .pin-wrap .zone-corner{position:absolute;top:-3px;left:-4px;background:#fff;color:var(--ink);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);font-family:"Archivo",sans-serif;font-weight:800;font-size:7.5px;}
   .pin-wrap .size-corner{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:rgba(18,22,28,0.9);color:#fff;border-radius:6px;font-family:"Archivo",sans-serif;font-size:8.5px;font-weight:800;padding:0px 4px;}
+  .pin-wrap .electric-corner{position:absolute;bottom:-4px;right:-4px;background:#F2B705;color:#12161C;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,0.4);}
   .pin-wrap.blink{animation:pinBlink 1.5s infinite;}
   @keyframes pinBlink{0%{filter:drop-shadow(0 0 0 var(--glow));}60%{filter:drop-shadow(0 0 9px var(--glow));}100%{filter:drop-shadow(0 0 0 var(--glow));}}
   .pin-wrap.pending .pin-svg{opacity:0.6;}
@@ -225,6 +231,11 @@
   </button>
 </div>
 
+<div class="map-legend">
+  <div class="row"><span class="dot go"></span>Libre</div>
+  <div class="row"><span class="dot pending"></span>Bientôt libre</div>
+</div>
+
 <div class="report-row">
   <button class="report-btn-half go" id="reportFab">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>
@@ -281,6 +292,10 @@
     <div class="choice-btn active cat-normal-sel" data-val="normal"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Normale</div>
     <div class="choice-btn" data-val="handicap"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="19" r="3"/><circle cx="9" cy="5" r="1.6" fill="currentColor" stroke="none"/><path d="M9 8v5l4 2 3 5"/><path d="M9 12h5"/></svg></span>Handicapé</div>
     <div class="choice-btn" data-val="delivery"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M3 8v8l9 4 9-4V8"/><path d="M12 12v8"/></svg></span>Livraison</div>
+  </div>
+  <p class="section-label">Options</p>
+  <div class="choice-grid" style="margin-bottom:18px;">
+    <div class="choice-btn" id="electricToggleBtn"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>Borne électrique</div>
   </div>
   <p class="section-label">Type de zone</p>
   <div class="choice-grid" id="zoneChoice">
@@ -345,7 +360,26 @@
   <div class="badges-row" id="badgesRow"></div>
   <p class="section-label">Classement de la communauté</p>
   <div id="leaderboardList"></div>
+  <button class="btn btn-ghost" id="legalLinkBtn">Confidentialité &amp; mentions</button>
   <button class="btn btn-ghost" id="closeProfileBtn">Fermer</button>
+</div>
+
+<!-- LEGAL / PRIVACY SHEET -->
+<div class="sheet" id="legalSheet">
+  <div class="sheet-handle"></div>
+  <h3>Confidentialité &amp; mentions</h3>
+  <p class="section-label">Notre principe</p>
+  <div class="impact-line" style="color:var(--ink);background:var(--paper-2);">PlaceLibre ne collecte aucune donnée personnelle identifiable : pas d'email, pas de compte, pas de numéro de téléphone, pas de suivi publicitaire.</div>
+  <p class="section-label">Ce qui est stocké</p>
+  <div class="impact-line" style="color:var(--ink);background:var(--paper-2);">
+    • Un identifiant aléatoire propre à ton téléphone (dans la mémoire de ton navigateur, jamais partagé avec un tiers)<br>
+    • Le pseudonyme que tu choisis toi-même<br>
+    • Les coordonnées des places que tu signales (précises, car nécessaires pour les localiser)<br>
+    • Ton nombre de points, contributions, badges et ta série de jours
+  </div>
+  <p class="section-label">Ce qui est partagé avec les autres utilisateurs</p>
+  <div class="impact-line" style="color:var(--ink);background:var(--paper-2);">Les places signalées, ton pseudonyme et tes points sont visibles par tous les utilisateurs de l'appli — c'est ce qui permet le partage communautaire en temps réel. Cette base est hébergée chez Firebase (Google).</div>
+  <button class="btn btn-ghost" id="closeLegalBtn">Fermer</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -379,6 +413,7 @@
     clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
     home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
     briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    bolt: '<path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="currentColor" stroke="none"/>',
     flame: '<path d="M12 2s5 5 5 10a5 5 0 0 1-10 0c0-1.6.6-2.8 1.3-3.8.1 1.3 1 2.3 2.2 2.3a1.9 1.9 0 0 0 1.9-2c0-1.8-1.4-2.7-1.4-5.3.3-.4.6-.9 1-1.2z" fill="currentColor" stroke="none"/>'
   };
   function svg(name, size, sw){
@@ -435,7 +470,7 @@
   let markers = {};
   let state = { spots: [], leaderboard: {} };
   let identity = { deviceId: null, name: 'Contributeur' };
-  let selected = { vehicle:'car', size:'S', cat:'normal', zone:'free', reportType:'immediate', delay:'0' };
+  let selected = { vehicle:'car', size:'S', cat:'normal', zone:'free', reportType:'immediate', delay:'0', electric:false };
   let openSpotId = null;
 
   const $ = id => document.getElementById(id);
@@ -836,6 +871,7 @@
     const pending = isPending(spot);
     const stateClass = pending ? 'pending' : 'blink';
     const sizeBadge = spot.size ? `<div class="size-corner">${spot.size}</div>` : '';
+    const electricBadge = spot.electric ? `<div class="electric-corner">${svg('bolt',9,0)}</div>` : '';
     return `<div class="pin-wrap ${stateClass}" style="--glow:${meta.color}">
       <svg class="pin-svg" width="38" height="48" viewBox="0 0 38 48" xmlns="http://www.w3.org/2000/svg">
         <path d="M19 1C10.2 1 3 8.3 3 17.5c0 12.3 16 29 16 29s16-16.7 16-29C35 8.3 27.8 1 19 1z" fill="${meta.color}" stroke="#12161C" stroke-width="2"/>
@@ -844,6 +880,7 @@
       ${corner}
       ${zoneBadge}
       ${sizeBadge}
+      ${electricBadge}
     </div>`;
   }
 
@@ -1044,6 +1081,10 @@
   wireChoice('catChoice','cat');
   wireChoice('zoneChoice','zone');
   wireChoice('delayChoice','delay');
+  $('electricToggleBtn').addEventListener('click', () => {
+    selected.electric = !selected.electric;
+    $('electricToggleBtn').classList.toggle('active', selected.electric);
+  });
 
   document.querySelectorAll('#reportTypeChoice .choice-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1174,6 +1215,7 @@
     setChoiceActive('vehicleChoice','car'); selected.vehicle='car';
     setChoiceActive('catChoice','normal'); selected.cat='normal';
     setChoiceActive('zoneChoice','free'); selected.zone='free';
+    selected.electric = false; $('electricToggleBtn').classList.remove('active');
     document.querySelector('#reportSheet h3').textContent = 'Signaler une place';
     $('confirmReportBtn').textContent = 'Publier au niveau de ma position';
   }
@@ -1189,6 +1231,7 @@
     setChoiceActive('sizeChoice', spot.size || 'M'); selected.size = spot.size || 'M';
     setChoiceActive('catChoice', spot.cat); selected.cat = spot.cat;
     setChoiceActive('zoneChoice', spot.zone); selected.zone = spot.zone;
+    selected.electric = !!spot.electric; $('electricToggleBtn').classList.toggle('active', selected.electric);
     document.querySelector('#reportSheet h3').textContent = 'Ajuster la place';
     $('confirmReportBtn').textContent = 'Mettre à jour les détails';
     openSheet($('reportSheet'));
@@ -1205,8 +1248,8 @@
     if(editingSpotId){
       const spot = state.spots.find(s=>s.id===editingSpotId);
       if(spot){
-        spot.vehicle=selected.vehicle; spot.size=selected.size; spot.cat=selected.cat; spot.zone=selected.zone;
-        dbRoot.child('spots').child(editingSpotId).update({ vehicle:spot.vehicle, size:spot.size, cat:spot.cat, zone:spot.zone }).catch(()=>{});
+        spot.vehicle=selected.vehicle; spot.size=selected.size; spot.cat=selected.cat; spot.zone=selected.zone; spot.electric=!!selected.electric;
+        dbRoot.child('spots').child(editingSpotId).update({ vehicle:spot.vehicle, size:spot.size, cat:spot.cat, zone:spot.zone, electric:spot.electric }).catch(()=>{});
       }
       editingSpotId = null;
       await saveState();
@@ -1239,7 +1282,7 @@
       vehicle: selected.vehicle, size: selected.size, cat: selected.cat, zone: selected.zone,
       reportType: selected.reportType, leaveAt: now + delayMs,
       ts: now, confidence: 1, reporterId: identity.deviceId, reporterName: identity.name,
-      thanks: 0, confirmedCount: 0, note: noteVal || null
+      thanks: 0, confirmedCount: 0, note: noteVal || null, electric: !!selected.electric
     };
     state.spots.push(spot);
     dbWrite('spots/'+spot.id, 'set', spot);
@@ -1264,7 +1307,7 @@
     openSpotId = id;
     $('detailIcon').innerHTML = VEH_ICON_BIG[spot.vehicle];
     $('detailIcon').style.background = CAT_META[spot.cat].color;
-    $('detailTitle').textContent = `Place ${spot.vehicle==='car'?'voiture':'2 roues'} — ${CAT_META[spot.cat].label} · ${ZONE_META[spot.zone||'free'].label}${spot.size ? ' ('+spot.size+')' : ''}`;
+    $('detailTitle').textContent = `Place ${spot.vehicle==='car'?'voiture':'2 roues'} — ${CAT_META[spot.cat].label} · ${ZONE_META[spot.zone||'free'].label}${spot.size ? ' ('+spot.size+')' : ''}${spot.electric ? ' ⚡' : ''}`;
     const mine = spot.reporterId === identity.deviceId;
     $('thanksBtn').style.display = mine ? 'none' : 'flex';
     $('flagBtn').style.display = mine ? 'none' : 'block';
@@ -1416,6 +1459,11 @@
   }
   $('profileBtn').addEventListener('click', async () => { await loadState(); renderProfile(); openSheet($('profileSheet')); });
   $('closeProfileBtn').addEventListener('click', closeSheets);
+  $('legalLinkBtn').addEventListener('click', () => {
+    $('profileSheet').classList.remove('open');
+    openSheet($('legalSheet'));
+  });
+  $('closeLegalBtn').addEventListener('click', closeSheets);
   $('nameInput').addEventListener('change', async (e) => {
     identity.name = e.target.value.trim() || identity.name;
     await saveIdentity();
