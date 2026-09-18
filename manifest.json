@@ -1,6 +1,6 @@
 {
-  "name": "PlaceLibre",
-  "short_name": "PlaceLibre",
+  "name": "FastSpot",
+  "short_name": "FastSpot",
   "description": "Trouvez et signalez des places de stationnement libres autour de vous",
   "start_url": "./placelibre.html",
   "scope": "./",
