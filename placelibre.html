@@ -374,7 +374,7 @@
   <div class="impact-line" style="color:var(--ink);background:var(--paper-2);">
     • Un identifiant aléatoire propre à ton téléphone (dans la mémoire de ton navigateur, jamais partagé avec un tiers)<br>
     • Le pseudonyme que tu choisis toi-même<br>
-    • Les coordonnées des places que tu signales (précises, car nécessaires pour les localiser)<br>
+    • Les coordonnées des places que tu signales, arrondies à ~50 mètres pour ne pas exposer ta position exacte au moment du signalement<br>
     • Ton nombre de points, contributions, badges et ta série de jours
   </div>
   <p class="section-label">Ce qui est partagé avec les autres utilisateurs</p>
@@ -485,6 +485,11 @@
   function uuid(){
     if(crypto.randomUUID) return crypto.randomUUID();
     return 'xxxx-xxxx-xxxx'.replace(/x/g, ()=> (Math.random()*16|0).toString(16));
+  }
+  // arrondit à une grille d'environ 50m, pour ne pas exposer la position exacte du signaleur
+  function roundCoord(lat, lon){
+    const grid = 0.00045;
+    return { lat: Math.round(lat/grid)*grid, lon: Math.round(lon/grid)*grid };
   }
 
   // ---------- prompt banner (suggestions contextuelles) ----------
@@ -863,6 +868,15 @@
     return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
+  function reporterTier(reporterId){
+    const e = state.leaderboard && state.leaderboard[reporterId];
+    if(!e) return 'neutral';
+    const flagged = e.flagged||0, contrib = e.contrib||0;
+    if(flagged >= 2) return 'risky';
+    if(contrib >= 5 && flagged === 0) return 'trusted';
+    return 'neutral';
+  }
+
   function spotIconHtml(spot){
     const meta = CAT_META[spot.cat];
     const veh = VEH_ICON[spot.vehicle];
@@ -872,9 +886,21 @@
     const stateClass = pending ? 'pending' : 'blink';
     const sizeBadge = spot.size ? `<div class="size-corner">${spot.size}</div>` : '';
     const electricBadge = spot.electric ? `<div class="electric-corner">${svg('bolt',9,0)}</div>` : '';
-    return `<div class="pin-wrap ${stateClass}" style="--glow:${meta.color}">
+
+    const tier = reporterTier(spot.reporterId);
+    const strokeColor = tier === 'trusted' ? '#1F9D66' : tier === 'risky' ? '#D64545' : '#12161C';
+    const dashAttr = tier === 'risky' ? 'stroke-dasharray="4 2"' : '';
+
+    let animDuration = '1.5s';
+    if(!pending){
+      const remainMs = EXPIRY_MS - (Date.now() - freeAt(spot));
+      if(remainMs <= 30000) animDuration = '0.35s';
+      else if(remainMs <= 60000) animDuration = '0.8s';
+    }
+
+    return `<div class="pin-wrap ${stateClass}" style="--glow:${meta.color};animation-duration:${animDuration};">
       <svg class="pin-svg" width="38" height="48" viewBox="0 0 38 48" xmlns="http://www.w3.org/2000/svg">
-        <path d="M19 1C10.2 1 3 8.3 3 17.5c0 12.3 16 29 16 29s16-16.7 16-29C35 8.3 27.8 1 19 1z" fill="${meta.color}" stroke="#12161C" stroke-width="2"/>
+        <path d="M19 1C10.2 1 3 8.3 3 17.5c0 12.3 16 29 16 29s16-16.7 16-29C35 8.3 27.8 1 19 1z" fill="${meta.color}" stroke="${strokeColor}" stroke-width="2" ${dashAttr}/>
       </svg>
       <div class="pin-icon">${veh}</div>
       ${corner}
@@ -1115,7 +1141,8 @@
   $('cancelReportBtn').addEventListener('click', () => { editingSpotId=null; resetReportSheetToDefault(); closeSheets(); });
 
   async function quickPublishLeaving(){
-    const existing = findNearbyActiveSpot(myPos.lat, myPos.lon, 'car');
+    const rc = roundCoord(myPos.lat, myPos.lon);
+    const existing = findNearbyActiveSpot(rc.lat, rc.lon, 'car');
     if(existing){
       existing.confidence = (existing.confidence||1)+1;
       existing.ts = Date.now();
@@ -1128,7 +1155,7 @@
     const now = Date.now();
     const delayMs = 2 * 60000;
     const spot = {
-      id: uuid(), lat: myPos.lat, lon: myPos.lon,
+      id: uuid(), lat: rc.lat, lon: rc.lon,
       vehicle: 'car', size: null, cat: 'normal', zone: 'free',
       reportType: 'leaving', leaveAt: now + delayMs, ts: now, confidence: 1,
       reporterId: identity.deviceId, reporterName: identity.name,
@@ -1154,8 +1181,9 @@
   }
 
   async function quickPublish(overridePos, overrideValues){
-    const pos = overridePos || myPos;
-    if(!pos) return;
+    const pos0 = overridePos || myPos;
+    if(!pos0) return;
+    const pos = roundCoord(pos0.lat, pos0.lon);
     const vals = overrideValues || {vehicle:'car',size:null,cat:'normal',zone:'free'};
 
     const existing = findNearbyActiveSpot(pos.lat, pos.lon, vals.vehicle);
@@ -1261,9 +1289,10 @@
     }
     const now = Date.now();
     const delayMs = selected.reportType === 'leaving' ? parseInt(selected.delay,10) * 60000 : 0;
+    const rc = roundCoord(myPos.lat, myPos.lon);
 
     if(selected.reportType === 'immediate'){
-      const existing = findNearbyActiveSpot(myPos.lat, myPos.lon, selected.vehicle);
+      const existing = findNearbyActiveSpot(rc.lat, rc.lon, selected.vehicle);
       if(existing){
         existing.confidence = (existing.confidence||1)+1;
         existing.ts = now;
@@ -1278,7 +1307,7 @@
 
     const noteVal = $('noteInput').value.trim().slice(0,60);
     const spot = {
-      id: uuid(), lat: myPos.lat, lon: myPos.lon,
+      id: uuid(), lat: rc.lat, lon: rc.lon,
       vehicle: selected.vehicle, size: selected.size, cat: selected.cat, zone: selected.zone,
       reportType: selected.reportType, leaveAt: now + delayMs,
       ts: now, confidence: 1, reporterId: identity.deviceId, reporterName: identity.name,
@@ -1503,11 +1532,28 @@
     startGeo();
     drawRadiusCircle();
     checkEventWarnings();
+
+    // déclenchement automatique via un raccourci Siri personnel (URL ?action=quick ou ?action=leaving)
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    if(action === 'quick' || action === 'leaving'){
+      const tryAuto = (attemptsLeft) => {
+        if(myPos){
+          if(action === 'leaving') quickPublishLeaving(); else quickPublish();
+        } else if(attemptsLeft > 0){
+          setTimeout(()=>tryAuto(attemptsLeft-1), 800);
+        } else {
+          toast('Position indisponible — ouvre l\'appli normalement pour signaler');
+        }
+      };
+      setTimeout(()=>tryAuto(8), 1200);
+    }
   })();
 
   // les places/classement arrivent désormais en temps réel via Firebase ;
   // seule l'heure change pour les alertes événement, d'où cette vérification périodique légère.
   setInterval(checkEventWarnings, 60000);
+  setInterval(() => { if(focusPoint) renderMarkers(); }, 5000);
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', () => {
