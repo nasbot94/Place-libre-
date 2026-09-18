@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PlaceLibre</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
@@ -171,6 +173,8 @@
 
   .leaflet-control-attribution{background:rgba(15,19,25,0.7) !important;color:#8993a4 !important;font-size:10px !important;}
   .leaflet-control-attribution a{color:#8993a4 !important;}
+  .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large{background:rgba(31,157,102,0.35) !important;}
+  .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div{background:var(--go) !important;color:#fff !important;font-family:"Archivo",sans-serif !important;font-weight:800 !important;}
 </style>
 </head>
 <body>
@@ -284,6 +288,8 @@
     <div class="choice-btn" data-val="paid" style="font-family:Archivo,sans-serif;">€<span style="font-family:-apple-system,sans-serif;font-weight:700;">Payante</span></div>
     <div class="choice-btn" data-val="blue"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span>Zone bleue</div>
   </div>
+  <p class="section-label">Note (optionnelle)</p>
+  <input class="name-input" id="noteInput" placeholder="Ex: côté droit après le feu" style="margin-bottom:16px;" maxlength="60">
   <button class="btn btn-primary" id="confirmReportBtn">Publier au niveau de ma position</button>
   <button class="btn btn-ghost" id="cancelReportBtn">Annuler</button>
 </div>
@@ -299,6 +305,7 @@
     </div>
   </div>
   <div class="countdown">Disparaît dans <strong id="detailCountdown">--</strong> si personne ne confirme</div>
+  <button class="btn btn-primary" id="navigateBtn" style="margin-bottom:14px;">Itinéraire vers cette place</button>
   <div class="impact-line" id="detailImpact">Cette place a déjà aidé 0 personne(s) à éviter de tourner en rond.</div>
   <div id="pendingInfo" style="display:none;" class="impact-line">Un conducteur va libérer cette place. Repassez au bon moment !</div>
   <div id="pendingOwnerActions" style="display:none;">
@@ -312,6 +319,7 @@
       <button class="btn btn-danger" id="takenBtn">Prise</button>
     </div>
     <button class="btn thanks-btn" id="thanksBtn"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21s-7-4.4-9.5-8.8C1 8.9 2.4 6 5.4 6c1.8 0 3.1 1 3.6 2.3C9.5 7 10.8 6 12.6 6c3 0 4.4 2.9 2.9 6.2C17.5 16.6 12 21 12 21z"/></svg></span>Merci pour l'info</button>
+    <button class="btn btn-ghost" id="flagBtn" style="color:var(--danger);">Signaler comme suspect</button>
   </div>
   <button class="btn btn-ghost" id="closeDetailBtn">Fermer</button>
 </div>
@@ -343,6 +351,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
@@ -415,6 +424,8 @@
 
   let map = L.map('map', { zoomControl:false }).setView([48.8566,2.3522], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
+  const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 55, disableClusteringAtZoom: 17, spiderfyOnMaxZoom:false });
+  map.addLayer(clusterGroup);
 
   let myPos = null;
   let focusPoint = null;
@@ -541,6 +552,7 @@
       const v = snap.val() || {};
       state.spots = Object.keys(v).map(k => ({ ...v[k], id:k }));
       pruneExpired();
+      lsSet('placelibre_spots_cache', JSON.stringify(state.spots));
       renderMarkers();
       checkProximityPrompts();
       checkThanksNotifications();
@@ -556,6 +568,30 @@
       updateSocialProof();
     });
   }
+
+  // ---------- résilience hors-ligne : file d'attente pour les écritures qui échouent ----------
+  function queueOfflineOp(op){
+    let q = [];
+    try{ q = JSON.parse(lsGet('placelibre_outbox') || '[]'); }catch(e){}
+    q.push(op);
+    lsSet('placelibre_outbox', JSON.stringify(q));
+    toast('Hors-ligne — sera envoyé au retour du réseau');
+  }
+  function runDbOp(op){
+    const ref = dbRoot.child(op.path);
+    return op.method === 'remove' ? ref.remove() : ref[op.method](op.payload);
+  }
+  function dbWrite(path, method, payload){
+    runDbOp({ path, method, payload }).catch(() => queueOfflineOp({ path, method, payload }));
+  }
+  function flushOutbox(){
+    let q = [];
+    try{ q = JSON.parse(lsGet('placelibre_outbox') || '[]'); }catch(e){}
+    if(!q.length) return;
+    lsSet('placelibre_outbox', '[]');
+    q.forEach(op => { runDbOp(op).catch(() => queueOfflineOp(op)); });
+  }
+  window.addEventListener('online', () => { flushOutbox(); toast('Connexion rétablie — envoi des signalements en attente'); });
 
   // ---------- lieux à risque et calendrier d'événements (saisi manuellement) ----------
   const VENUES = [
@@ -828,14 +864,14 @@
         markers[spot.id].setIcon(icon);
         updatePendingTooltip(markers[spot.id], spot, pending);
       } else {
-        const m = L.marker([spot.lat, spot.lon], { icon }).addTo(map);
+        const m = L.marker([spot.lat, spot.lon], { icon }).addTo(clusterGroup);
         m.on('click', () => openDetail(spot.id));
         updatePendingTooltip(m, spot, pending);
         markers[spot.id] = m;
       }
     });
     Object.keys(markers).forEach(id => {
-      if(!activeIds.has(id)){ map.removeLayer(markers[id]); delete markers[id]; }
+      if(!activeIds.has(id)){ clusterGroup.removeLayer(markers[id]); delete markers[id]; }
     });
     $('heroNum').textContent = pendingCount > 0 ? `${freeCount} + ${pendingCount}` : freeCount;
     $('heroLabel').textContent = pendingCount > 0 ? 'libres · bientôt libres' : 'place(s) disponible(s)';
@@ -1058,7 +1094,7 @@
       thanks: 0, confirmedCount: 0
     };
     state.spots.push(spot);
-    dbRoot.child('spots').child(spot.id).set(spot).catch(()=>{});
+    dbWrite('spots/'+spot.id, 'set', spot);
     const me = myEntry();
     me.points += 15; me.contrib += 1;
     bumpStreak(me);
@@ -1101,7 +1137,7 @@
       thanks:0, confirmedCount:0
     };
     state.spots.push(spot);
-    dbRoot.child('spots').child(spot.id).set(spot).catch(()=>{});
+    dbWrite('spots/'+spot.id, 'set', spot);
     const me = myEntry();
     me.points += 10; me.contrib += 1;
     bumpStreak(me);
@@ -1197,15 +1233,17 @@
       }
     }
 
+    const noteVal = $('noteInput').value.trim().slice(0,60);
     const spot = {
       id: uuid(), lat: myPos.lat, lon: myPos.lon,
       vehicle: selected.vehicle, size: selected.size, cat: selected.cat, zone: selected.zone,
       reportType: selected.reportType, leaveAt: now + delayMs,
       ts: now, confidence: 1, reporterId: identity.deviceId, reporterName: identity.name,
-      thanks: 0, confirmedCount: 0
+      thanks: 0, confirmedCount: 0, note: noteVal || null
     };
     state.spots.push(spot);
-    dbRoot.child('spots').child(spot.id).set(spot).catch(()=>{});
+    dbWrite('spots/'+spot.id, 'set', spot);
+    $('noteInput').value = '';
     const me = myEntry();
     const bonus = selected.reportType === 'leaving' ? 15 : 10;
     me.points += bonus; me.contrib += 1;
@@ -1229,6 +1267,7 @@
     $('detailTitle').textContent = `Place ${spot.vehicle==='car'?'voiture':'2 roues'} — ${CAT_META[spot.cat].label} · ${ZONE_META[spot.zone||'free'].label}${spot.size ? ' ('+spot.size+')' : ''}`;
     const mine = spot.reporterId === identity.deviceId;
     $('thanksBtn').style.display = mine ? 'none' : 'flex';
+    $('flagBtn').style.display = mine ? 'none' : 'block';
     updateDetail();
     clearInterval(countdownTimer);
     countdownTimer = setInterval(updateDetail, 1000);
@@ -1241,7 +1280,7 @@
     const pending = isPending(spot);
     const ageSec = Math.floor((Date.now()-spot.ts)/1000);
     const ageTxt = ageSec < 60 ? `Signalée il y a ${ageSec}s` : `Signalée il y a ${Math.floor(ageSec/60)} min`;
-    $('detailSub').textContent = ageTxt + ((spot.confidence||1) >= 2 ? ` · Confirmée ×${spot.confidence}` : '');
+    $('detailSub').textContent = ageTxt + ((spot.confidence||1) >= 2 ? ` · Confirmée ×${spot.confidence}` : '') + (spot.note ? ` · "${spot.note}"` : '');
 
     $('pendingInfo').style.display = (pending && !mine) ? 'block' : 'none';
     $('pendingOwnerActions').style.display = (pending && mine) ? 'block' : 'none';
@@ -1283,6 +1322,42 @@
   $('stillThereBtn').addEventListener('click', () => quickStillThere(openSpotId));
   $('takenBtn').addEventListener('click', () => quickTaken(openSpotId));
   $('thanksBtn').addEventListener('click', () => quickThanks(openSpotId));
+  $('flagBtn').addEventListener('click', () => quickFlag(openSpotId));
+
+  $('navigateBtn').addEventListener('click', () => {
+    const spot = state.spots.find(s=>s.id===openSpotId);
+    if(!spot) return;
+    showPromptBanner({
+      text: 'Ouvrir l\'itinéraire avec…',
+      buttons: [
+        { label:'Waze', primary:true, onClick: ()=> { window.location.href = `https://waze.com/ul?ll=${spot.lat},${spot.lon}&navigate=yes`; } },
+        { label:'Google Maps', onClick: ()=> { window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lon}&travelmode=driving`; } },
+        { label:'Plans', onClick: ()=> { window.location.href = `https://maps.apple.com/?daddr=${spot.lat},${spot.lon}&dirflg=d`; } }
+      ],
+      timeoutMs: 15000
+    });
+  });
+
+  const FLAG_THRESHOLD = 3;
+  async function quickFlag(id){
+    const spot = state.spots.find(s=>s.id===id);
+    if(!spot) return;
+    if(spot.flaggedBy && spot.flaggedBy[identity.deviceId]){ toast('Tu as déjà signalé cette place'); return; }
+    const flags = (spot.flags||0) + 1;
+    const flaggedBy = { ...(spot.flaggedBy||{}), [identity.deviceId]: true };
+    if(flags >= FLAG_THRESHOLD){
+      state.spots = state.spots.filter(s=>s.id!==id);
+      dbWrite('spots/'+id, 'remove', null);
+      if(spot.reporterId){ dbRoot.child('leaderboard').child(spot.reporterId).child('flagged').transaction(cur=>(cur||0)+1); }
+      renderMarkers();
+      if(openSpotId===id){ clearInterval(countdownTimer); closeSheets(); }
+      toast('Place retirée après plusieurs signalements de la communauté');
+    } else {
+      spot.flags = flags; spot.flaggedBy = flaggedBy;
+      dbWrite('spots/'+id, 'update', { flags, flaggedBy });
+      toast('Merci, on garde un œil sur cette place');
+    }
+  }
 
   async function quickStillThere(id){
     const spot = state.spots.find(s=>s.id===id);
@@ -1374,6 +1449,7 @@
   (async function init(){
     await loadIdentity();
     loadFavorites();
+    try{ const c = lsGet('placelibre_spots_cache'); if(c) state.spots = JSON.parse(c); }catch(e){}
     updateProfileChip();
     updateSocialProof();
     startGeo();
